@@ -79,19 +79,34 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="proj-industry">Vertical / Industry Sector</label>
+            <label class="form-label" for="proj-industry">
+              Vertical / Industry Sector
+              <span class="tooltip-container">
+                <span class="material-symbols-outlined tooltip-icon">info</span>
+                <span class="tooltip-text">Customizes baseline storage expansion calculations and recommends pre-configured compliance settings.</span>
+              </span>
+            </label>
             <select id="proj-industry" class="select-input">
               <option value="Finance" selected>Financial Services (Strict Auditing / Vaulting)</option>
               <option value="Healthcare">Healthcare (HIPAA Integrity / Rapid Restore)</option>
               <option value="Government">Government / Public Sector (High Hardening)</option>
               <option value="Retail">Retail & E-commerce (High-Growth Files)</option>
               <option value="Manufacturing">Manufacturing (Distributed Edge / ROBO)</option>
+              <option value="Education">Higher Education & Research (Large volumes, tight budget)</option>
+              <option value="Energy">Energy & Utilities (High availability, critical infrastructure)</option>
+              <option value="Media">Media & Entertainment (Rich media, SmartFiles archiving)</option>
               <option value="Other">Standard Enterprise</option>
             </select>
           </div>
 
           <div class="form-group">
-            <label class="form-label">Compliance Directives Required</label>
+            <label class="form-label">
+              Compliance Directives Required
+              <span class="tooltip-container">
+                <span class="material-symbols-outlined tooltip-icon">info</span>
+                <span class="tooltip-text">Directives automatically recommend architectural features: e.g., DORA forces SiteContinuity; FedRAMP enforces Customer KMS; CCPA/GDPR require DataHawk discovery.</span>
+              </span>
+            </label>
             <div class="selector-grid">
               <label class="selectable-item selected" style="cursor: pointer;">
                 <input type="checkbox" class="compliance-chk" value="gdpr" checked style="display:none;">
@@ -105,13 +120,33 @@
               </label>
               <label class="selectable-item" style="cursor: pointer;">
                 <input type="checkbox" class="compliance-chk" value="pcidss" style="display:none;">
-                <span class="selectable-item-title">PCI-DSS Validation</span>
+                <span class="selectable-item-title">PCI-DSS v4.0 Validation</span>
                 <span class="selectable-item-desc">Requires cardholder logs shielding, MPA deletion triggers, and threat scans.</span>
               </label>
               <label class="selectable-item selected" style="cursor: pointer;">
                 <input type="checkbox" class="compliance-chk" value="nis2" checked style="display:none;">
                 <span class="selectable-item-title">NIS2 Resilience Act</span>
                 <span class="selectable-item-desc">Requires air-gapped cyber vaults and automated DR testing.</span>
+              </label>
+              <label class="selectable-item" style="cursor: pointer;">
+                <input type="checkbox" class="compliance-chk" value="dora" style="display:none;">
+                <span class="selectable-item-title">DORA Resiliency Act</span>
+                <span class="selectable-item-desc">Financial sector. Enforces SiteContinuity runbooks and FortKnox isolation.</span>
+              </label>
+              <label class="selectable-item" style="cursor: pointer;">
+                <input type="checkbox" class="compliance-chk" value="fedramp" style="display:none;">
+                <span class="selectable-item-title">FedRAMP Hardening</span>
+                <span class="selectable-item-desc">Federal standards. Mandates Customer KMS encryption and FortKnox GovCloud.</span>
+              </label>
+              <label class="selectable-item" style="cursor: pointer;">
+                <input type="checkbox" class="compliance-chk" value="soc2" style="display:none;">
+                <span class="selectable-item-title">SOC 2 Type II Auditing</span>
+                <span class="selectable-item-desc">Demands Helios MFA/MPA controls and immutable WORM backups.</span>
+              </label>
+              <label class="selectable-item" style="cursor: pointer;">
+                <input type="checkbox" class="compliance-chk" value="ccpa" style="display:none;">
+                <span class="selectable-item-title">CCPA / CPRA Privacy</span>
+                <span class="selectable-item-desc">Enforces customer PII scanning (DataHawk) and automated keys rotation.</span>
               </label>
             </div>
           </div>
@@ -296,7 +331,13 @@
           
           <div class="grid-2col">
             <div class="form-group">
-              <label class="form-label" for="rpo-select">Recovery Point Objective (RPO)</label>
+              <label class="form-label" for="rpo-select">
+                Recovery Point Objective (RPO)
+                <span class="tooltip-container">
+                  <span class="material-symbols-outlined tooltip-icon">info</span>
+                  <span class="tooltip-text">The maximum age of data that must be recovered from backup storage for normal operations (e.g., 15m CDP journals vs 24h daily backups).</span>
+                </span>
+              </label>
               <select id="rpo-select" class="select-input">
                 <option value="15min">15 Minutes (CDP Journaling)</option>
                 <option value="1hr" selected>1 Hour (High Resilience)</option>
@@ -305,7 +346,13 @@
               </select>
             </div>
             <div class="form-group">
-              <label class="form-label" for="rto-select">Recovery Time Objective (RTO)</label>
+              <label class="form-label" for="rto-select">
+                Recovery Time Objective (RTO)
+                <span class="tooltip-container">
+                  <span class="material-symbols-outlined tooltip-icon">info</span>
+                  <span class="tooltip-text">The target time duration within which system recovery must be completed after a disaster (e.g., Instant Mass Restore mounts backups directly in minutes).</span>
+                </span>
+              </label>
               <select id="rto-select" class="select-input">
                 <option value="Instant">Instant Mass Restore (< 5 mins)</option>
                 <option value="1hr">1 Hour (Fast Application Boot)</option>
@@ -316,7 +363,13 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="bcdr-repl-select">Off-Site Replication Target</label>
+            <label class="form-label" for="bcdr-repl-select">
+              Off-Site Replication Target
+              <span class="tooltip-container">
+                <span class="material-symbols-outlined tooltip-icon">info</span>
+                <span class="tooltip-text">Defines target copy destination. Mapped to secondary sites or public cloud editions, which duplicates cluster storage sizing. FortKnox isolates data in a cloud vault.</span>
+              </span>
+            </label>
             <select id="bcdr-repl-select" class="select-input">
               <option value="none">None (Single Local Site Only - Critical Risk)</option>
               <option value="second-site">Secondary On-Premises Cohesity Cluster (Multi-Site)</option>
@@ -329,6 +382,10 @@
             <div class="toggle-info">
               <span class="toggle-title">
                 <span class="material-symbols-outlined" style="color:var(--accent-blue)">sync_alt</span> SiteContinuity DR Orchestration
+                <span class="tooltip-container">
+                  <span class="material-symbols-outlined tooltip-icon">info</span>
+                  <span class="tooltip-text">Coordinates multi-tier application disaster recovery failovers, boot ordering, and performs non-disruptive compliance audits.</span>
+                </span>
               </span>
               <span class="toggle-desc">Automate application failover, failback runbooks, and perform sandbox testing.</span>
             </div>
@@ -349,6 +406,10 @@
               <span class="toggle-title">
                 <span class="material-symbols-outlined" style="color:var(--accent-purple)">shield</span> Cohesity FortKnox Cyber Vaulting
                 <span class="toggle-title-badge badge-security">Air-Gap</span>
+                <span class="tooltip-container">
+                  <span class="material-symbols-outlined tooltip-icon">info</span>
+                  <span class="tooltip-text">Implements a virtually air-gapped, isolated SaaS storage vault in AWS/Azure. Outbound-only TLS connections isolate backups from hacker access.</span>
+                </span>
               </span>
               <span class="toggle-desc">SaaS isolated storage vault. Keeps a virtually air-gapped recovery snapshot in the cloud.</span>
             </div>
@@ -363,6 +424,10 @@
               <span class="toggle-title">
                 <span class="material-symbols-outlined" style="color:var(--accent-purple)">troubleshoot</span> Cohesity DataHawk ML Guard
                 <span class="toggle-title-badge badge-security">AI Security</span>
+                <span class="tooltip-container">
+                  <span class="material-symbols-outlined tooltip-icon">info</span>
+                  <span class="tooltip-text">Uses machine learning to detect anomalous behavior (like sudden file encryption entropy) and scans backups for malware and sensitive PII.</span>
+                </span>
               </span>
               <span class="toggle-desc">Leverages AI for continuous malware threat detection and sensitive PII classification scans.</span>
             </div>
@@ -375,7 +440,13 @@
           <div class="grid-2col">
             <div class="toggle-card" style="margin-bottom:0">
               <div class="toggle-info">
-                <span class="toggle-title">Helios MFA</span>
+                <span class="toggle-title">
+                  Helios MFA
+                  <span class="tooltip-container">
+                    <span class="material-symbols-outlined tooltip-icon">info</span>
+                    <span class="tooltip-text">Enforces Multi-Factor Authentication on global cloud management plane to stop credential hijacking.</span>
+                  </span>
+                </span>
                 <span class="toggle-desc">Multi-Factor Authentication login checks.</span>
               </div>
               <label class="switch">
@@ -385,7 +456,13 @@
             </div>
             <div class="toggle-card" style="margin-bottom:0">
               <div class="toggle-info">
-                <span class="toggle-title">Quorum MPA</span>
+                <span class="toggle-title">
+                  Quorum MPA
+                  <span class="tooltip-container">
+                    <span class="material-symbols-outlined tooltip-icon">info</span>
+                    <span class="tooltip-text">Multi-Party Authorization. Prevents single rogue admins from deleting snapshots by requiring quorum approvals.</span>
+                  </span>
+                </span>
                 <span class="toggle-desc">Multi-Party Authorization approvals.</span>
               </div>
               <label class="switch">
@@ -396,7 +473,13 @@
           </div>
 
           <div class="form-group" style="margin-top:16px">
-            <label class="form-label" for="sec-kms">Encryption Key Management System (KMS)</label>
+            <label class="form-label" for="sec-kms">
+              Encryption Key Management System (KMS)
+              <span class="tooltip-container">
+                <span class="material-symbols-outlined tooltip-icon">info</span>
+                <span class="tooltip-text">Binds an external enterprise key store (AWS KMS, Azure Vault, HashiCorp Vault) to encrypt cluster storage with user keys.</span>
+              </span>
+            </label>
             <select id="sec-kms" class="select-input">
               <option value="cohesity">Cohesity-Managed Default Keys (Internal)</option>
               <option value="customer" selected>Customer-Managed External Keys (AWS KMS, Azure Vault, HashiCorp)</option>

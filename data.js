@@ -218,6 +218,42 @@ const COHESITY_DATA = {
         "Isolated immutable cyber vaulting (FortKnox) to guarantee business continuity",
         "Cleanroom recovery testing environment (malware scanning before restore)"
       ]
+    },
+    dora: {
+      name: "DORA Compliance",
+      requirements: [
+        "SiteContinuity DR orchestration for automated digital operational resilience testing",
+        "Continuous Data Protection (CDP) journaling for near-zero data loss SLAs",
+        "Isolated FortKnox SaaS vault to satisfy third-party data recovery isolation rules",
+        "Semi-annual non-disruptive DR failover walkthrough audit logs"
+      ]
+    },
+    fedramp: {
+      name: "FedRAMP Hardening",
+      requirements: [
+        "FIPS 140-2 certified data-at-rest encryption using external KMS key chains",
+        "Cohesity FortKnox GovCloud vault storage for secure, air-gapped federal backups",
+        "Multi-Party Authorization (MPA) quorum gatekeepers on all administrative changes",
+        "Continuous DataHawk ML scanning for malware and indicators of compromise (IOCs)"
+      ]
+    },
+    soc2: {
+      name: "SOC 2 Type II Auditing",
+      requirements: [
+        "Helios control plane Multi-Factor Authentication (MFA) enforcement",
+        "Encrypted, immutable audit logs tracking all recoveries and administrative acts",
+        "Immutable WORM DataLock configurations on backup storage pools",
+        "Automated vulnerability and threat signature scanning via DataHawk"
+      ]
+    },
+    ccpa: {
+      name: "CCPA / CPRA Privacy",
+      requirements: [
+        "Cohesity DataHawk data classification queries to map California consumer PI",
+        "Automated encryption for data in transit and storage tiers",
+        "Quorum-based Multi-Party approvals (MPA) protecting backups from unauthorized wipeout",
+        "Telemetry and system status logging to support compliance readiness audits"
+      ]
     }
   },
 

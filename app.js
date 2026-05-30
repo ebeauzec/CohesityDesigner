@@ -109,11 +109,22 @@ class CohesityArchitectWizard {
     });
 
     document.querySelectorAll(".compliance-chk").forEach(chk => {
-      chk.addEventListener("change", () => {
+      chk.addEventListener("change", (e) => {
+        const card = chk.closest(".selectable-item");
+        if (chk.checked) {
+          card.classList.add("selected");
+        } else {
+          card.classList.remove("selected");
+        }
         this.state.project.compliance = Array.from(
           document.querySelectorAll(".compliance-chk:checked")
         ).map(el => el.value);
+        
+        // Auto-apply recommended configuration targets
+        this.applyComplianceDefaults();
+        
         this.updateSidebarStats();
+        this.renderTopologyDiagram();
       });
     });
 
@@ -267,6 +278,50 @@ class CohesityArchitectWizard {
         this.dom.copyBtn.textContent = "Copy";
       }, 2000);
     });
+  }
+
+  applyComplianceDefaults() {
+    const comps = this.state.project.compliance;
+    
+    if (comps.includes("dora")) {
+      this.setCheckboxState("chk-fortknox", true, 'security', 'fortknox');
+      this.setCheckboxState("chk-sitecontinuity", true, 'bcdr', 'siteContinuity');
+    }
+    
+    if (comps.includes("fedramp")) {
+      this.setCheckboxState("chk-fortknox", true, 'security', 'fortknox');
+      this.setCheckboxState("chk-datahawk", true, 'security', 'datahawk');
+      this.setCheckboxState("chk-mpa", true, 'security', 'mpa');
+      
+      const kmsSel = document.getElementById("sec-kms");
+      if (kmsSel) {
+        kmsSel.value = "customer";
+        this.state.security.kms = "customer";
+      }
+    }
+    
+    if (comps.includes("gdpr") || comps.includes("ccpa")) {
+      this.setCheckboxState("chk-datahawk", true, 'security', 'datahawk');
+    }
+    
+    if (comps.includes("soc2")) {
+      this.setCheckboxState("chk-mfa", true, 'security', 'mfa');
+      this.setCheckboxState("chk-mpa", true, 'security', 'mpa');
+    }
+    
+    if (comps.includes("nis2")) {
+      this.setCheckboxState("chk-fortknox", true, 'security', 'fortknox');
+      this.setCheckboxState("chk-datahawk", true, 'security', 'datahawk');
+      this.setCheckboxState("chk-sitecontinuity", true, 'bcdr', 'siteContinuity');
+    }
+  }
+
+  setCheckboxState(elemId, value, stateCategory, stateKey) {
+    const el = document.getElementById(elemId);
+    if (el) {
+      el.checked = value;
+      this.state[stateCategory][stateKey] = value;
+    }
   }
 
   loadWorkloadPresets() {
