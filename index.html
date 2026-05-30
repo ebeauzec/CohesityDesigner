@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cohesity Solution Architect Wizard</title>
+  
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- Google Material Symbols (Icons) -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+</head>
+<body>
+
+  <!-- Printable Report Wrapper (Hidden on screen, populated dynamically during print) -->
+  <div id="printable-report-wrapper"></div>
+
+  <!-- Primary Application Container -->
+  <div class="app-container">
+    
+    <!-- Application Header -->
+    <header class="app-header">
+      <div class="brand">
+        <span class="material-symbols-outlined" style="color: var(--accent-green); font-size: 32px;">shield_with_heart</span>
+        <div>
+          <h1>Cohesity Architect Toolkit</h1>
+          <p style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">Enterprise Resilience & Cyber Recovery Sizer</p>
+        </div>
+        <span class="brand-badge">Sales Engineering Edition</span>
+      </div>
+      <div class="header-actions">
+        <button id="btn-print" class="btn btn-secondary">
+          <span class="material-symbols-outlined" style="font-size: 18px;">print</span> Export SE Proposal
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace Dashboard Grid -->
+    <main class="dashboard-grid">
+      
+      <!-- LEFT COLUMN: Sizing & Configuration Wizard -->
+      <section class="glass-card wizard-container">
+        
+        <!-- Steps Progress Tracker -->
+        <div class="steps-progress">
+          <div class="steps-progress-fill" style="width: 0%;"></div>
+          
+          <div class="step-node active" data-step="1">
+            <div class="step-circle">1</div>
+            <span class="step-label">Project</span>
+          </div>
+          <div class="step-node" data-step="2">
+            <div class="step-circle">2</div>
+            <span class="step-label">Workloads</span>
+          </div>
+          <div class="step-node" data-step="3">
+            <div class="step-circle">3</div>
+            <span class="step-label">Resilience</span>
+          </div>
+          <div class="step-node" data-step="4">
+            <div class="step-circle">4</div>
+            <span class="step-label">Security</span>
+          </div>
+          <div class="step-node" data-step="5">
+            <div class="step-circle">5</div>
+            <span class="step-label">Deploy</span>
+          </div>
+        </div>
+
+        <!-- WIZARD STEP 1: Project details -->
+        <div class="wizard-step active" id="step-1">
+          <h2 class="step-title">Project Details & Drivers</h2>
+          <p class="step-subtitle">Identify the target client profile, compliance goals, and business recovery guidelines.</p>
+          
+          <div class="form-group">
+            <label class="form-label" for="proj-name">Customer Project Name</label>
+            <input type="text" id="proj-name" class="text-input" placeholder="e.g. Acme Corp Enterprise Cyber Resiliency" value="Enterprise Resilient Infrastructure">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="proj-industry">Vertical / Industry Sector</label>
+            <select id="proj-industry" class="select-input">
+              <option value="Finance" selected>Financial Services (Strict Auditing / Vaulting)</option>
+              <option value="Healthcare">Healthcare (HIPAA Integrity / Rapid Restore)</option>
+              <option value="Government">Government / Public Sector (High Hardening)</option>
+              <option value="Retail">Retail & E-commerce (High-Growth Files)</option>
+              <option value="Manufacturing">Manufacturing (Distributed Edge / ROBO)</option>
+              <option value="Other">Standard Enterprise</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Compliance Directives Required</label>
+            <div class="selector-grid">
+              <label class="selectable-item selected" style="cursor: pointer;">
+                <input type="checkbox" class="compliance-chk" value="gdpr" checked style="display:none;">
+                <span class="selectable-item-title">GDPR / Privacy Laws</span>
+                <span class="selectable-item-desc">Mandates data encryption, classification scanner, and strict user access tracking.</span>
+              </label>
+              <label class="selectable-item" style="cursor: pointer;">
+                <input type="checkbox" class="compliance-chk" value="hipaa" style="display:none;">
+                <span class="selectable-item-title">HIPAA Security Rule</span>
+                <span class="selectable-item-desc">Enforces off-site copy, automated keys management, and detailed logs.</span>
+              </label>
+              <label class="selectable-item" style="cursor: pointer;">
+                <input type="checkbox" class="compliance-chk" value="pcidss" style="display:none;">
+                <span class="selectable-item-title">PCI-DSS Validation</span>
+                <span class="selectable-item-desc">Requires cardholder logs shielding, MPA deletion triggers, and threat scans.</span>
+              </label>
+              <label class="selectable-item selected" style="cursor: pointer;">
+                <input type="checkbox" class="compliance-chk" value="nis2" checked style="display:none;">
+                <span class="selectable-item-title">NIS2 Resilience Act</span>
+                <span class="selectable-item-desc">Requires air-gapped cyber vaults and automated DR testing.</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- WIZARD STEP 2: Workload Sizing -->
+        <div class="wizard-step" id="step-2">
+          <h2 class="step-title">Workloads & Capacities</h2>
+          <p class="step-subtitle">Enable protection components and define front-end storage sizes and growth parameters.</p>
+          
+          <!-- VMware VMs -->
+          <div class="toggle-card" id="wl-card-vm">
+            <div class="toggle-info">
+              <span class="toggle-title">
+                <span class="material-symbols-outlined" style="color:var(--accent-blue)">dns</span> Virtual Machines (VMware/Hyper-V)
+              </span>
+              <span class="toggle-desc">Primary server virtualization backup. Utilizes VADP with block tracking.</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="wl-chk-vm">
+              <span class="slider-switch"></span>
+            </label>
+          </div>
+          <div id="wl-controls-vm" class="slider-group" style="display:none;">
+            <div class="slider-header">
+              <div class="slider-title-wrapper">
+                <span class="form-label" style="margin-bottom:0">Front-End Data Size</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="slider-val-display"><span id="wl-val-vm">50</span> TB</span>
+                <input type="number" id="wl-num-vm" class="number-override-input" value="50">
+              </div>
+            </div>
+            <div class="slider-control-row">
+              <input type="range" id="wl-range-vm" class="slider-input" min="1" max="1000" value="50">
+            </div>
+            <div style="margin-top:12px; display:flex; align-items:center; justify-content:space-between;">
+              <span class="form-label" style="font-size:11px; margin-bottom:0">Estimated Annual Growth:</span>
+              <input type="range" id="wl-growth-vm" min="0" max="50" value="10" style="width:120px; height:4px;">
+              <span id="wl-growth-val-vm" class="slider-val-display" style="font-size:11px; padding:1px 6px;">10%</span>
+            </div>
+          </div>
+
+          <!-- Databases -->
+          <div class="toggle-card" id="wl-card-database">
+            <div class="toggle-info">
+              <span class="toggle-title">
+                <span class="material-symbols-outlined" style="color:var(--accent-purple)">storage</span> Enterprise Databases (Oracle/SQL/SAP)
+              </span>
+              <span class="toggle-desc">Transactional workloads requiring high database recovery performance.</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="wl-chk-database">
+              <span class="slider-switch"></span>
+            </label>
+          </div>
+          <div id="wl-controls-database" class="slider-group" style="display:none;">
+            <div class="slider-header">
+              <div class="slider-title-wrapper">
+                <span class="form-label" style="margin-bottom:0">Database Data Size</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="slider-val-display"><span id="wl-val-database">20</span> TB</span>
+                <input type="number" id="wl-num-database" class="number-override-input" value="20">
+              </div>
+            </div>
+            <div class="slider-control-row">
+              <input type="range" id="wl-range-database" class="slider-input" min="1" max="500" value="20">
+            </div>
+            <div style="margin-top:12px; display:flex; align-items:center; justify-content:space-between;">
+              <span class="form-label" style="font-size:11px; margin-bottom:0">Estimated Annual Growth:</span>
+              <input type="range" id="wl-growth-database" min="0" max="50" value="15" style="width:120px; height:4px;">
+              <span id="wl-growth-val-database" class="slider-val-display" style="font-size:11px; padding:1px 6px;">15%</span>
+            </div>
+          </div>
+
+          <!-- Unstructured File Data -->
+          <div class="toggle-card" id="wl-card-files">
+            <div class="toggle-info">
+              <span class="toggle-title">
+                <span class="material-symbols-outlined" style="color:var(--accent-green)">folder</span> Unstructured Files/NAS (SmartFiles)
+              </span>
+              <span class="toggle-desc">General user shares, file archives, object stores, cold file tiering.</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="wl-chk-files">
+              <span class="slider-switch"></span>
+            </label>
+          </div>
+          <div id="wl-controls-files" class="slider-group" style="display:none;">
+            <div class="slider-header">
+              <div class="slider-title-wrapper">
+                <span class="form-label" style="margin-bottom:0">Unstructured Files Data</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="slider-val-display"><span id="wl-val-files">100</span> TB</span>
+                <input type="number" id="wl-num-files" class="number-override-input" value="100">
+              </div>
+            </div>
+            <div class="slider-control-row">
+              <input type="range" id="wl-range-files" class="slider-input" min="1" max="2000" value="100">
+            </div>
+            <div style="margin-top:12px; display:flex; align-items:center; justify-content:space-between;">
+              <span class="form-label" style="font-size:11px; margin-bottom:0">Estimated Annual Growth:</span>
+              <input type="range" id="wl-growth-files" min="0" max="50" value="20" style="width:120px; height:4px;">
+              <span id="wl-growth-val-files" class="slider-val-display" style="font-size:11px; padding:1px 6px;">20%</span>
+            </div>
+          </div>
+
+          <!-- SaaS protection -->
+          <div class="toggle-card" id="wl-card-saas">
+            <div class="toggle-info">
+              <span class="toggle-title">
+                <span class="material-symbols-outlined" style="color:var(--accent-blue)">cloud_done</span> SaaS (M365 / Salesforce)
+                <span class="toggle-title-badge badge-saas">SaaS Cloud</span>
+              </span>
+              <span class="toggle-desc">Cloud-to-cloud backup. Protects Exchange, OneDrive, Sharepoint, Teams.</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="wl-chk-saas">
+              <span class="slider-switch"></span>
+            </label>
+          </div>
+          <div id="wl-controls-saas" class="slider-group" style="display:none;">
+            <div class="slider-header">
+              <div class="slider-title-wrapper">
+                <span class="form-label" style="margin-bottom:0">SaaS Data Sized</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="slider-val-display"><span id="wl-val-saas">10</span> TB</span>
+                <input type="number" id="wl-num-saas" class="number-override-input" value="10">
+              </div>
+            </div>
+            <div class="slider-control-row">
+              <input type="range" id="wl-range-saas" class="slider-input" min="1" max="300" value="10">
+            </div>
+            <div style="margin-top:12px; display:flex; align-items:center; justify-content:space-between;">
+              <span class="form-label" style="font-size:11px; margin-bottom:0">Estimated Annual Growth:</span>
+              <input type="range" id="wl-growth-saas" min="0" max="50" value="12" style="width:120px; height:4px;">
+              <span id="wl-growth-val-saas" class="slider-val-display" style="font-size:11px; padding:1px 6px;">12%</span>
+            </div>
+          </div>
+
+          <!-- Kubernetes Container protection -->
+          <div class="toggle-card" id="wl-card-k8s">
+            <div class="toggle-info">
+              <span class="toggle-title">
+                <span class="material-symbols-outlined" style="color:var(--accent-green)">grid_view</span> Kubernetes (Containers)
+              </span>
+              <span class="toggle-desc">Backs up stateful volume namespaces and deployment manifests.</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="wl-chk-k8s">
+              <span class="slider-switch"></span>
+            </label>
+          </div>
+          <div id="wl-controls-k8s" class="slider-group" style="display:none;">
+            <div class="slider-header">
+              <div class="slider-title-wrapper">
+                <span class="form-label" style="margin-bottom:0">PV Data Sized</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="slider-val-display"><span id="wl-val-k8s">5</span> TB</span>
+                <input type="number" id="wl-num-k8s" class="number-override-input" value="5">
+              </div>
+            </div>
+            <div class="slider-control-row">
+              <input type="range" id="wl-range-k8s" class="slider-input" min="1" max="100" value="5">
+            </div>
+            <div style="margin-top:12px; display:flex; align-items:center; justify-content:space-between;">
+              <span class="form-label" style="font-size:11px; margin-bottom:0">Estimated Annual Growth:</span>
+              <input type="range" id="wl-growth-k8s" min="0" max="50" value="15" style="width:120px; height:4px;">
+              <span id="wl-growth-val-k8s" class="slider-val-display" style="font-size:11px; padding:1px 6px;">15%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- WIZARD STEP 3: BCDR Setup -->
+        <div class="wizard-step" id="step-3">
+          <h2 class="step-title">Business Continuity & Recovery SLAs</h2>
+          <p class="step-subtitle">Set data protection SLAs and multi-site replication policies.</p>
+          
+          <div class="grid-2col">
+            <div class="form-group">
+              <label class="form-label" for="rpo-select">Recovery Point Objective (RPO)</label>
+              <select id="rpo-select" class="select-input">
+                <option value="15min">15 Minutes (CDP Journaling)</option>
+                <option value="1hr" selected>1 Hour (High Resilience)</option>
+                <option value="4hr">4 Hours (Standard Database)</option>
+                <option value="24hr">24 Hours (Standard File Archive)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="rto-select">Recovery Time Objective (RTO)</label>
+              <select id="rto-select" class="select-input">
+                <option value="Instant">Instant Mass Restore (< 5 mins)</option>
+                <option value="1hr">1 Hour (Fast Application Boot)</option>
+                <option value="4hr" selected>4 Hours (Standard Recovery)</option>
+                <option value="12hr">12 Hours (Tape/Archival Equivalent)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="bcdr-repl-select">Off-Site Replication Target</label>
+            <select id="bcdr-repl-select" class="select-input">
+              <option value="none">None (Single Local Site Only - Critical Risk)</option>
+              <option value="second-site">Secondary On-Premises Cohesity Cluster (Multi-Site)</option>
+              <option value="cloud-edition">Self-Managed Cloud Nodes (AWS/Azure IaaS)</option>
+              <option value="saas-vault" selected>Cohesity SaaS Vault (FortKnox Air-Gap)</option>
+            </select>
+          </div>
+
+          <div class="toggle-card">
+            <div class="toggle-info">
+              <span class="toggle-title">
+                <span class="material-symbols-outlined" style="color:var(--accent-blue)">sync_alt</span> SiteContinuity DR Orchestration
+              </span>
+              <span class="toggle-desc">Automate application failover, failback runbooks, and perform sandbox testing.</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chk-sitecontinuity" checked>
+              <span class="slider-switch"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- WIZARD STEP 4: Cyber Resilience Security -->
+        <div class="wizard-step" id="step-4">
+          <h2 class="step-title">Cyber Security & Hardening Controls</h2>
+          <p class="step-subtitle">Configure ransomware defense measures, scanning, and cryptographic requirements.</p>
+
+          <div class="toggle-card">
+            <div class="toggle-info">
+              <span class="toggle-title">
+                <span class="material-symbols-outlined" style="color:var(--accent-purple)">shield</span> Cohesity FortKnox Cyber Vaulting
+                <span class="toggle-title-badge badge-security">Air-Gap</span>
+              </span>
+              <span class="toggle-desc">SaaS isolated storage vault. Keeps a virtually air-gapped recovery snapshot in the cloud.</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chk-fortknox" checked>
+              <span class="slider-switch"></span>
+            </label>
+          </div>
+
+          <div class="toggle-card">
+            <div class="toggle-info">
+              <span class="toggle-title">
+                <span class="material-symbols-outlined" style="color:var(--accent-purple)">troubleshoot</span> Cohesity DataHawk ML Guard
+                <span class="toggle-title-badge badge-security">AI Security</span>
+              </span>
+              <span class="toggle-desc">Leverages AI for continuous malware threat detection and sensitive PII classification scans.</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chk-datahawk" checked>
+              <span class="slider-switch"></span>
+            </label>
+          </div>
+
+          <div class="grid-2col">
+            <div class="toggle-card" style="margin-bottom:0">
+              <div class="toggle-info">
+                <span class="toggle-title">Helios MFA</span>
+                <span class="toggle-desc">Multi-Factor Authentication login checks.</span>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="chk-mfa" checked>
+                <span class="slider-switch"></span>
+              </label>
+            </div>
+            <div class="toggle-card" style="margin-bottom:0">
+              <div class="toggle-info">
+                <span class="toggle-title">Quorum MPA</span>
+                <span class="toggle-desc">Multi-Party Authorization approvals.</span>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="chk-mpa" checked>
+                <span class="slider-switch"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top:16px">
+            <label class="form-label" for="sec-kms">Encryption Key Management System (KMS)</label>
+            <select id="sec-kms" class="select-input">
+              <option value="cohesity">Cohesity-Managed Default Keys (Internal)</option>
+              <option value="customer" selected>Customer-Managed External Keys (AWS KMS, Azure Vault, HashiCorp)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- WIZARD STEP 5: Deployment Model -->
+        <div class="wizard-step" id="step-5">
+          <h2 class="step-title">Deployment Scenario</h2>
+          <p class="step-subtitle">Define hardware infrastructure models and nodes performance preferences.</p>
+
+          <div class="form-group">
+            <label class="form-label">Architectural Deployment Scenario</label>
+            <div class="form-group" style="display:flex; flex-direction:column; gap:10px;">
+              <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                <input type="radio" name="deploy-model" value="onprem" style="accent-color:var(--accent-green);">
+                <div>
+                  <strong>On-Premises Dedicated Infrastructure</strong>
+                  <div style="font-size:11px; color:var(--text-secondary);">Deploy dedicated physical cluster nodes inside corporate datacenters.</div>
+                </div>
+              </label>
+              <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                <input type="radio" name="deploy-model" value="saas" style="accent-color:var(--accent-green);">
+                <div>
+                  <strong>Fully Managed Cohesity SaaS (Cloud-to-Cloud)</strong>
+                  <div style="font-size:11px; color:var(--text-secondary);">Direct subscription backing up virtual workloads without hardware nodes.</div>
+                </div>
+              </label>
+              <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                <input type="radio" name="deploy-model" value="hybrid" checked style="accent-color:var(--accent-green);">
+                <div>
+                  <strong>Hybrid Cloud Model (Recommended)</strong>
+                  <div style="font-size:11px; color:var(--text-secondary);">On-Premise physical nodes tiering/replicating snapshots to SaaS vault (FortKnox).</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Physical Hardware Nodes Class Preference</label>
+            <div style="display:flex; gap:20px;">
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <input type="radio" name="node-perf" value="flash" checked style="accent-color:var(--accent-green);">
+                <span>Performance NVMe All-Flash (C6200 Class)</span>
+              </label>
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <input type="radio" name="node-perf" value="hybrid" style="accent-color:var(--accent-green);">
+                <span>Capacity Standard Hybrid (C5000 Class)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Buttons Bar -->
+        <div class="wizard-buttons">
+          <button id="btn-prev" class="btn btn-secondary" disabled>
+            <span class="material-symbols-outlined" style="font-size:16px">arrow_back</span> Back
+          </button>
+          <button id="btn-next" class="btn btn-primary">
+            Next Step <span class="material-symbols-outlined" style="font-size:16px">arrow_forward</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- RIGHT COLUMN: Real-Time recommendations & sizing summary -->
+      <aside class="sidebar-container">
+        
+        <!-- Sizing Sizer Dashboard -->
+        <section class="glass-card dashboard-widget">
+          <h3 class="widget-title">
+            <span>Sizing Calculation Summary</span>
+            <span class="material-symbols-outlined" style="color:var(--accent-green)">calculate</span>
+          </h3>
+          
+          <div class="playground-grid">
+            <div class="playground-metric">
+              <span class="playground-metric-label">Front-End Data</span>
+              <span id="rec-frontend-tb" class="playground-metric-val highlight" style="color:var(--text-primary)">0 TB</span>
+            </div>
+            <div class="playground-metric">
+              <span class="playground-metric-label">Usable Needed</span>
+              <span id="rec-usable-tb" class="playground-metric-val highlight" style="color:var(--accent-green)">0 TB</span>
+            </div>
+          </div>
+
+          <div style="border-top: 1px solid var(--border-color); padding-top: 12px;">
+            <div class="metric-row" style="margin-bottom:6px;">
+              <span class="metric-label">Recommended Hardware:</span>
+            </div>
+            <div id="rec-node-config" style="font-size:13px; font-weight:700; color:var(--accent-green); line-height:1.4;">
+              3x Cohesity C6200 NVMe Nodes
+            </div>
+            <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Calculated using variable-length dedupe ratios + GFS retention margins.</div>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; border-top:1px solid var(--border-color); padding-top:12px; font-size:11px;">
+            <div>Target RPO: <strong id="rec-rpo-sla" style="color:white">1hr</strong></div>
+            <div>Target RTO: <strong id="rec-rto-sla" style="color:white">4hr</strong></div>
+          </div>
+        </section>
+
+        <!-- Compliance & Resilience Rating -->
+        <section class="glass-card dashboard-widget">
+          <h3 class="widget-title">
+            <span>Cyber Resilience Index</span>
+            <span class="material-symbols-outlined" style="color:var(--accent-purple)">security</span>
+          </h3>
+          
+          <div class="compliance-gauge-wrapper">
+            <div class="gauge-svg-container">
+              <svg viewBox="0 0 72 72">
+                <circle class="gauge-circle-bg" cx="36" cy="36" r="32" />
+                <circle id="compliance-stroke" class="gauge-circle-val" cx="36" cy="36" r="32" />
+              </svg>
+              <div id="compliance-score-val" class="gauge-value-text">100</div>
+            </div>
+            <div class="gauge-info">
+              <span id="compliance-rating" class="gauge-title" style="color:var(--accent-green)">Exemplary Resiliency</span>
+              <span class="gauge-desc">Calculated score assessing immutability, MFA/MPA, vaults, and malware scanning.</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Recommended Product Suite checklist -->
+        <section class="glass-card dashboard-widget">
+          <h3 class="widget-title">
+            <span>Recommended Cohesity Suite</span>
+            <span class="material-symbols-outlined" style="color:var(--accent-blue)">inventory_2</span>
+          </h3>
+          <div class="rec-products-list" id="rec-product-list">
+            <!-- Populated dynamically via app.js -->
+          </div>
+        </section>
+
+        <!-- Security Hardening checklist status -->
+        <section class="glass-card dashboard-widget">
+          <h3 class="widget-title">
+            <span>Hardening Checklist</span>
+            <span class="material-symbols-outlined" style="color:var(--accent-purple)">verified_user</span>
+          </h3>
+          <div class="checklist-list" id="security-checklist">
+            <!-- Populated dynamically via app.js -->
+          </div>
+        </section>
+
+      </aside>
+    </main>
+
+    <!-- LOWER SECTION: SVG Topology diagram & Integration code snippets -->
+    <section class="dashboard-grid" style="margin-top:24px;">
+      
+      <!-- Left Box: SVG Diagram -->
+      <div class="glass-card topology-card" style="grid-column: 1 / -1;">
+        <div class="topology-header">
+          <h3 class="topology-title" style="display:flex; align-items:center; gap:8px;">
+            <span class="material-symbols-outlined" style="color:var(--accent-green)">hub</span>
+            Interactive Architectural Topology Diagram
+          </h3>
+          <span style="font-size:11px; color:var(--text-secondary)">Click nodes inside the diagram to display configuration details</span>
+        </div>
+        
+        <div class="topology-canvas">
+          <!-- Floating info popover for SVG hotspots -->
+          <div id="hotspot-overlay" class="hotspot-details-overlay">
+            <div style="font-weight:700; color:var(--accent-green); margin-bottom:4px;">Workspace Node</div>
+            <div>Hover or click a node to reveal sizing variables.</div>
+          </div>
+          
+          <div id="topology-svg-container" style="width:100%; height:100%;">
+            <!-- Rendered dynamically by app.js -->
+          </div>
+        </div>
+      </div>
+      
+    </section>
+
+    <!-- Integration snippet panel -->
+    <section class="glass-card playbook-card" style="margin-top:24px;">
+      <h3 style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
+        <span class="material-symbols-outlined" style="color:var(--accent-blue)">terminal</span>
+        Enterprise Integration Snippet Playbooks
+      </h3>
+      
+      <div class="tabs-header">
+        <button class="tab-btn active" data-tab="splunk">Splunk SIEM Webhook</button>
+        <button class="tab-btn" data-tab="servicenow">ServiceNow API Restore</button>
+        <button class="tab-btn" data-tab="sitecontinuity">SiteContinuity runbook YAML</button>
+      </div>
+
+      <div class="tab-pane active" id="tab-splunk">
+        <h4 id="code-title" style="font-size:14px; margin-bottom:6px; color:var(--text-primary);">SIEM Integration</h4>
+        <p id="code-desc" style="font-size:11px; color:var(--text-secondary); margin-bottom:12px;">Trigger feed.</p>
+        
+        <div class="code-container">
+          <button id="copy-btn" class="copy-btn">Copy</button>
+          <pre><code id="code-display">// Splunk integration payload</code></pre>
+        </div>
+      </div>
+
+      <div class="tab-pane" id="tab-servicenow"></div>
+      <div class="tab-pane" id="tab-sitecontinuity"></div>
+    </section>
+
+    <footer style="margin-top:40px; border-top:1px solid var(--border-color); padding:16px 0; text-align:center; font-size:11px; color:var(--text-muted);">
+      Cohesity Architecture Wizard &copy; 2026. Built for Sales Engineering Demonstration purposes.
+    </footer>
+
+  </div>
+
+  <!-- Javascript Logic Files -->
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+# System files
+.DS_Store
+Thumbs.db
+
+# OS metadata
+.Spotlight-V100
+.Trashes
+
+# Editor directories and files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*~

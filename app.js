@@ -1,0 +1,1086 @@
+/**
+ * Cohesity Architecture Wizard - Controller and Sizing Engine
+ */
+
+class CohesityArchitectWizard {
+  constructor() {
+    this.state = {
+      currentStep: 1,
+      project: {
+        name: "Enterprise Resilient Infrastructure",
+        industry: "Finance",
+        compliance: ["gdpr", "nis2"]
+      },
+      workloads: {
+        vm: { active: true, capacityTB: 50, growth: 10, dedupe: 2.5, retentionDays: 30 },
+        database: { active: true, capacityTB: 20, growth: 15, dedupe: 3.0, retentionDays: 14 },
+        files: { active: false, capacityTB: 100, growth: 20, dedupe: 1.4, retentionDays: 90 },
+        saas: { active: false, capacityTB: 10, growth: 12, dedupe: 2.0, retentionDays: 365 },
+        k8s: { active: false, capacityTB: 5, growth: 15, dedupe: 2.0, retentionDays: 30 }
+      },
+      bcdr: {
+        rpo: "1hr",
+        rto: "4hr",
+        replication: "saas-vault", // 'none', 'second-site', 'cloud-edition', 'saas-vault'
+        siteContinuity: true
+      },
+      security: {
+        fortknox: true,
+        datahawk: true,
+        mfa: true,
+        mpa: true,
+        kms: "customer" // 'cohesity', 'customer'
+      },
+      deployment: {
+        model: "hybrid", // 'onprem', 'saas', 'hybrid'
+        nodePreference: "flash" // 'flash', 'hybrid'
+      }
+    };
+
+    // DOM Elements Cache
+    this.dom = {};
+  }
+
+  init() {
+    this.cacheDomElements();
+    this.bindEvents();
+    this.loadWorkloadPresets();
+    this.updateUI();
+  }
+
+  cacheDomElements() {
+    // Nav elements
+    this.dom.stepNodes = document.querySelectorAll(".step-node");
+    this.dom.progressFill = document.querySelector(".steps-progress-fill");
+    
+    // Buttons
+    this.dom.btnPrev = document.getElementById("btn-prev");
+    this.dom.btnNext = document.getElementById("btn-next");
+    this.dom.btnPrint = document.getElementById("btn-print");
+    
+    // Step wrappers
+    this.dom.steps = document.querySelectorAll(".wizard-step");
+    
+    // Dynamic recommendation panels
+    this.dom.statFrontEnd = document.getElementById("rec-frontend-tb");
+    this.dom.statUsable = document.getElementById("rec-usable-tb");
+    this.dom.statNodes = document.getElementById("rec-node-config");
+    this.dom.statRpo = document.getElementById("rec-rpo-sla");
+    this.dom.statRto = document.getElementById("rec-rto-sla");
+    this.dom.complianceScore = document.getElementById("compliance-score-val");
+    this.dom.complianceOffset = document.getElementById("compliance-stroke");
+    this.dom.complianceClass = document.getElementById("compliance-rating");
+    this.dom.recProductList = document.getElementById("rec-product-list");
+    this.dom.checklist = document.getElementById("security-checklist");
+    
+    // Playbook tabs
+    this.dom.tabBtns = document.querySelectorAll(".tab-btn");
+    this.dom.tabPanes = document.querySelectorAll(".tab-pane");
+    this.dom.codePre = document.getElementById("code-display");
+    this.dom.copyBtn = document.getElementById("copy-btn");
+    
+    // SVG Canvas
+    this.dom.svgContainer = document.getElementById("topology-svg-container");
+    this.dom.hotspotOverlay = document.getElementById("hotspot-overlay");
+  }
+
+  bindEvents() {
+    // Wizard Navigation
+    this.dom.btnPrev.addEventListener("click", () => this.navigateStep(-1));
+    this.dom.btnNext.addEventListener("click", () => this.navigateStep(1));
+    this.dom.btnPrint.addEventListener("click", () => this.generateReportAndPrint());
+
+    // Step Nav Clicks
+    this.dom.stepNodes.forEach((node, idx) => {
+      node.addEventListener("click", () => {
+        this.goToStep(idx + 1);
+      });
+    });
+
+    // Step 1: Project Details Inputs
+    document.getElementById("proj-name").addEventListener("input", (e) => {
+      this.state.project.name = e.target.value || "Cohesity Solution Design";
+      this.updateSidebarStats();
+    });
+    
+    document.getElementById("proj-industry").addEventListener("change", (e) => {
+      this.state.project.industry = e.target.value;
+      this.updateSidebarStats();
+    });
+
+    document.querySelectorAll(".compliance-chk").forEach(chk => {
+      chk.addEventListener("change", () => {
+        this.state.project.compliance = Array.from(
+          document.querySelectorAll(".compliance-chk:checked")
+        ).map(el => el.value);
+        this.updateSidebarStats();
+      });
+    });
+
+    // Step 2: Workloads Setup (Checkboxes & Sliders)
+    const workloadTypes = ["vm", "database", "files", "saas", "k8s"];
+    workloadTypes.forEach(type => {
+      const card = document.getElementById(`wl-card-${type}`);
+      const chk = document.getElementById(`wl-chk-${type}`);
+      const range = document.getElementById(`wl-range-${type}`);
+      const num = document.getElementById(`wl-num-${type}`);
+      const growthRange = document.getElementById(`wl-growth-${type}`);
+
+      // Selection Toggle
+      card.addEventListener("click", (e) => {
+        if (e.target.closest('.switch') || e.target === chk) {
+          return; // Let browser handle it
+        }
+        chk.checked = !chk.checked;
+        chk.dispatchEvent(new Event("change"));
+      });
+
+      chk.addEventListener("change", (e) => {
+        this.state.workloads[type].active = e.target.checked;
+        if (e.target.checked) {
+          card.classList.add("selected");
+          document.getElementById(`wl-controls-${type}`).style.display = "block";
+        } else {
+          card.classList.remove("selected");
+          document.getElementById(`wl-controls-${type}`).style.display = "none";
+        }
+        this.updateSidebarStats();
+        this.renderTopologyDiagram();
+      });
+
+      // Synchronize Slider & Number Inputs
+      range.addEventListener("input", (e) => {
+        num.value = e.target.value;
+        this.state.workloads[type].capacityTB = parseFloat(e.target.value);
+        this.updateSidebarStats();
+        this.renderTopologyDiagram();
+      });
+
+      num.addEventListener("change", (e) => {
+        let val = parseFloat(e.target.value) || 0;
+        if (val < range.min) val = range.min;
+        if (val > range.max) val = range.max;
+        range.value = val;
+        num.value = val;
+        this.state.workloads[type].capacityTB = val;
+        this.updateSidebarStats();
+        this.renderTopologyDiagram();
+      });
+
+      growthRange.addEventListener("input", (e) => {
+        document.getElementById(`wl-growth-val-${type}`).textContent = `${e.target.value}%`;
+        this.state.workloads[type].growth = parseInt(e.target.value);
+        this.updateSidebarStats();
+      });
+    });
+
+    // Step 3: BCDR Configs
+    document.getElementById("rpo-select").addEventListener("change", (e) => {
+      this.state.bcdr.rpo = e.target.value;
+      this.updateSidebarStats();
+    });
+
+    document.getElementById("rto-select").addEventListener("change", (e) => {
+      this.state.bcdr.rto = e.target.value;
+      this.updateSidebarStats();
+    });
+
+    document.getElementById("bcdr-repl-select").addEventListener("change", (e) => {
+      this.state.bcdr.replication = e.target.value;
+      this.updateSidebarStats();
+      this.renderTopologyDiagram();
+    });
+
+    document.getElementById("chk-sitecontinuity").addEventListener("change", (e) => {
+      this.state.bcdr.siteContinuity = e.target.checked;
+      this.updateSidebarStats();
+    });
+
+    // Step 4: Security & Resiliency
+    document.getElementById("chk-fortknox").addEventListener("change", (e) => {
+      this.state.security.fortknox = e.target.checked;
+      this.updateSidebarStats();
+      this.renderTopologyDiagram();
+    });
+
+    document.getElementById("chk-datahawk").addEventListener("change", (e) => {
+      this.state.security.datahawk = e.target.checked;
+      this.updateSidebarStats();
+      this.renderTopologyDiagram();
+    });
+
+    document.getElementById("chk-mfa").addEventListener("change", (e) => {
+      this.state.security.mfa = e.target.checked;
+      this.updateSidebarStats();
+    });
+
+    document.getElementById("chk-mpa").addEventListener("change", (e) => {
+      this.state.security.mpa = e.target.checked;
+      this.updateSidebarStats();
+    });
+
+    document.getElementById("sec-kms").addEventListener("change", (e) => {
+      this.state.security.kms = e.target.value;
+      this.updateSidebarStats();
+    });
+
+    // Step 5: Deployment Scenarios
+    document.querySelectorAll("input[name='deploy-model']").forEach(radio => {
+      radio.addEventListener("change", (e) => {
+        this.state.deployment.model = e.target.value;
+        this.updateSidebarStats();
+        this.renderTopologyDiagram();
+      });
+    });
+
+    document.querySelectorAll("input[name='node-perf']").forEach(radio => {
+      radio.addEventListener("change", (e) => {
+        this.state.deployment.nodePreference = e.target.value;
+        this.updateSidebarStats();
+      });
+    });
+
+    // Integration tabs
+    this.dom.tabBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        const targetTab = btn.getAttribute("data-tab");
+        
+        this.dom.tabBtns.forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        
+        this.dom.tabPanes.forEach(pane => {
+          if (pane.id === `tab-${targetTab}`) {
+            pane.classList.add("active");
+          } else {
+            pane.classList.remove("active");
+          }
+        });
+        
+        this.updateIntegrationCode(targetTab);
+      });
+    });
+
+    this.dom.copyBtn.addEventListener("click", () => {
+      navigator.clipboard.writeText(this.dom.codePre.textContent);
+      this.dom.copyBtn.textContent = "Copied!";
+      setTimeout(() => {
+        this.dom.copyBtn.textContent = "Copy";
+      }, 2000);
+    });
+  }
+
+  loadWorkloadPresets() {
+    // Set initial values from state into range inputs
+    Object.keys(this.state.workloads).forEach(type => {
+      const data = this.state.workloads[type];
+      const chk = document.getElementById(`wl-chk-${type}`);
+      const range = document.getElementById(`wl-range-${type}`);
+      const num = document.getElementById(`wl-num-${type}`);
+      const growthRange = document.getElementById(`wl-growth-${type}`);
+
+      chk.checked = data.active;
+      if (data.active) {
+        document.getElementById(`wl-card-${type}`).classList.add("selected");
+        document.getElementById(`wl-controls-${type}`).style.display = "block";
+      }
+
+      range.value = data.capacityTB;
+      num.value = data.capacityTB;
+      growthRange.value = data.growth;
+      document.getElementById(`wl-growth-val-${type}`).textContent = `${data.growth}%`;
+    });
+  }
+
+  navigateStep(direction) {
+    const nextStep = this.state.currentStep + direction;
+    if (nextStep >= 1 && nextStep <= 5) {
+      this.goToStep(nextStep);
+    }
+  }
+
+  goToStep(stepNumber) {
+    this.state.currentStep = stepNumber;
+    
+    // Update step visibility
+    this.dom.steps.forEach((step, idx) => {
+      if (idx + 1 === stepNumber) {
+        step.classList.add("active");
+      } else {
+        step.classList.remove("active");
+      }
+    });
+
+    // Update steps progress bar UI
+    this.dom.stepNodes.forEach((node, idx) => {
+      const num = idx + 1;
+      node.classList.remove("active", "completed");
+      if (num === stepNumber) {
+        node.classList.add("active");
+      } else if (num < stepNumber) {
+        node.classList.add("completed");
+      }
+    });
+
+    const percent = ((stepNumber - 1) / 4) * 100;
+    this.dom.progressFill.style.width = `${percent}%`;
+
+    // Manage Buttons State
+    this.dom.btnPrev.disabled = (stepNumber === 1);
+    if (stepNumber === 5) {
+      this.dom.btnNext.innerHTML = `Complete Proposal <i class="material-icons-round" style="font-size:16px">assignment_turned_in</i>`;
+    } else {
+      this.dom.btnNext.innerHTML = `Next Step <i class="material-icons-round" style="font-size:16px">arrow_forward</i>`;
+    }
+
+    this.updateUI();
+  }
+
+  calculateSizing() {
+    let totalFrontEndTB = 0;
+    let totalUsableNeededTB = 0;
+    let activeWorkloadsCount = 0;
+
+    // Standard Grandfather-Father-Son retention formula overhead factor
+    // Let's calculate base multiplier:
+    // Daily retention multiplier: (Days / 30) * 0.15
+    // GFS retention overhead factors:
+    // VMs: 1.3, DB: 1.15, Files: 1.4, SaaS: 1.8, Kubernetes: 1.25
+
+    Object.keys(this.state.workloads).forEach(type => {
+      const wl = this.state.workloads[type];
+      if (wl.active) {
+        activeWorkloadsCount++;
+        totalFrontEndTB += wl.capacityTB;
+
+        // Apply growth compounded over 3 years: F = P * (1 + r)^3
+        const compoundedCapacity = wl.capacityTB * Math.pow(1 + (wl.growth / 100), 3);
+        
+        // Apply Deduplication & Compression ratio reduction
+        const deduplicatedCapacity = compoundedCapacity / wl.dedupe;
+
+        // Apply retention policy multiplier based on workload properties
+        let retentionMultiplier = 1.1; // Baseline
+        if (type === "vm") retentionMultiplier = 1.35; // Standard VMs with snapshots
+        if (type === "database") retentionMultiplier = 1.15; // Database logs, short retention
+        if (type === "files") retentionMultiplier = 1.45; // SmartFiles data, longer archives
+        if (type === "saas") retentionMultiplier = 1.85; // SaaS archives, long legal hold (365d)
+        if (type === "k8s") retentionMultiplier = 1.25; // Dev/K8s backups
+
+        totalUsableNeededTB += (deduplicatedCapacity * retentionMultiplier);
+      }
+    });
+
+    // If replica is on secondary site or cloud edition self-managed, double the capacity requirements
+    let replicationMultiplier = 1.0;
+    if (this.state.bcdr.replication === "second-site" || this.state.bcdr.replication === "cloud-edition") {
+      replicationMultiplier = 2.0; // Needs 1:1 replica copy
+    } else if (this.state.bcdr.replication === "saas-vault" && this.state.security.fortknox) {
+      // FortKnox represents a vaulted SaaS storage, does not add to local primary nodes sizing
+      replicationMultiplier = 1.0; 
+    }
+
+    const calculatedUsableLocalTB = totalUsableNeededTB;
+    const totalSystemUsableTB = totalUsableNeededTB * replicationMultiplier;
+
+    // Node recommendations: Physical cluster sizing (Starts at 3 nodes min)
+    let nodeRecommendation = "";
+    let localNodeCount = 0;
+    let cloudNodeCount = 0;
+    let fortKnoxVaultTB = 0;
+    let nodeModelName = "";
+
+    if (this.state.deployment.model === "saas") {
+      nodeRecommendation = "Cohesity Cloud Services (SaaS Pricing model)";
+      nodeModelName = "SaaS Storage Subscription";
+    } else {
+      // Determine physical nodes layout based on user preferences and Database volumes
+      const isDatabaseHeavy = (this.state.workloads.database.active && 
+                               (this.state.workloads.database.capacityTB / (totalFrontEndTB || 1) > 0.35));
+      const performanceTier = (this.state.deployment.nodePreference === "flash" || isDatabaseHeavy);
+
+      if (performanceTier) {
+        nodeModelName = "C6200 NVMe All-Flash";
+        const nodeUsableTB = 64; // Model usable size
+        // N+1 cluster configuration: needs min 3 nodes, sized to tolerate losing 1 node.
+        localNodeCount = Math.max(3, Math.ceil(calculatedUsableLocalTB / nodeUsableTB) + 1);
+        nodeRecommendation = `${localNodeCount}x Cohesity ${nodeModelName} Nodes (${(localNodeCount * nodeUsableTB).toFixed(0)}TB usable, N+1 Config)`;
+      } else {
+        nodeModelName = "C5000 Hybrid (SSD+HDD)";
+        const nodeUsableTB = 96; // Model usable size
+        localNodeCount = Math.max(3, Math.ceil(calculatedUsableLocalTB / nodeUsableTB) + 1);
+        nodeRecommendation = `${localNodeCount}x Cohesity ${nodeModelName} Nodes (${(localNodeCount * nodeUsableTB).toFixed(0)}TB usable, N+1 Config)`;
+      }
+    }
+
+    // Cloud Node Replication sizing
+    if (this.state.bcdr.replication === "cloud-edition") {
+      const cloudNodeUsableTB = 40;
+      cloudNodeCount = Math.max(3, Math.ceil(calculatedUsableLocalTB / cloudNodeUsableTB) + 1);
+    }
+
+    // FortKnox vault sizing
+    if (this.state.security.fortknox) {
+      // Vault sizes: Usually front-end capacity + ~15% for compression/retention.
+      fortKnoxVaultTB = Math.ceil(totalFrontEndTB * 0.9);
+    }
+
+    return {
+      frontEndTB: totalFrontEndTB.toFixed(1),
+      usableLocalTB: calculatedUsableLocalTB.toFixed(1),
+      totalSystemUsableTB: totalSystemUsableTB.toFixed(1),
+      localNodeCount,
+      cloudNodeCount,
+      fortKnoxVaultTB,
+      nodeRecommendation,
+      nodeModelName,
+      activeWorkloadsCount
+    };
+  }
+
+  calculateComplianceScore() {
+    let score = 100;
+    let deductList = [];
+
+    // BCDR Checks
+    if (this.state.bcdr.rpo === "15min" && !this.state.bcdr.siteContinuity) {
+      score -= 10;
+      deductList.push("SiteContinuity required for 15-min CDP workloads");
+    }
+    if (this.state.bcdr.replication === "none") {
+      score -= 20;
+      deductList.push("No off-site replication configured");
+    }
+
+    // Security Checks
+    if (!this.state.security.fortknox) {
+      score -= 25;
+      deductList.push("No isolated cyber vault (FortKnox) to prevent ransomware propagation");
+    }
+    if (!this.state.security.datahawk) {
+      score -= 20;
+      deductList.push("No active AI/ML threat detection scanning (DataHawk)");
+    }
+    if (!this.state.security.mfa) {
+      score -= 15;
+      deductList.push("Multi-Factor Authentication disabled on Cluster Helios control plane");
+    }
+    if (!this.state.security.mpa) {
+      score -= 15;
+      deductList.push("Multi-Party Authorization quorum approvals not enforced");
+    }
+    if (this.state.security.kms === "cohesity") {
+      score -= 10;
+      deductList.push("Standard encryption used (External KMS recommended)");
+    }
+
+    // Workload check
+    let activeWl = false;
+    Object.keys(this.state.workloads).forEach(type => {
+      if (this.state.workloads[type].active) activeWl = true;
+    });
+    if (!activeWl) {
+      score = 0;
+      deductList = ["No workloads selected for protection"];
+    }
+
+    score = Math.max(10, score);
+    return { score, deductList };
+  }
+
+  updateSidebarStats() {
+    const sizing = this.calculateSizing();
+    const compliance = this.calculateComplianceScore();
+
+    // Render basic text elements
+    this.dom.statFrontEnd.textContent = `${sizing.frontEndTB} TB`;
+    this.dom.statUsable.textContent = `${sizing.usableLocalTB} TB`;
+    this.dom.statNodes.textContent = sizing.nodeRecommendation;
+    
+    // RPO / RTO UI outputs
+    this.dom.statRpo.textContent = this.state.bcdr.rpo;
+    this.dom.statRto.textContent = this.state.bcdr.rto;
+
+    // Render Compliance Radial progress ring
+    this.dom.complianceScore.textContent = compliance.score;
+    // Circular path length is 201px. Let's calculate percentage offset:
+    const offset = 201 - (201 * (compliance.score / 100));
+    this.dom.complianceOffset.style.strokeDashoffset = offset;
+
+    // Dynamic color matching compliance
+    let complianceColor = "var(--accent-green)";
+    let ratingName = "Exemplary Resiliency";
+    
+    if (compliance.score < 50) {
+      complianceColor = "var(--accent-red)";
+      ratingName = "Critical Resiliency Risk";
+    } else if (compliance.score < 80) {
+      complianceColor = "var(--accent-orange)";
+      ratingName = "Vulnerable Cyber Defense";
+    }
+
+    this.dom.complianceOffset.style.stroke = complianceColor;
+    this.dom.complianceScore.style.color = complianceColor;
+    this.dom.complianceClass.textContent = ratingName;
+    this.dom.complianceClass.style.color = complianceColor;
+
+    // Render Recommended Products List in sidebar
+    this.updateProductList(sizing);
+
+    // Render Hardening checklist items
+    this.updateChecklist(compliance);
+  }
+
+  updateProductList(sizing) {
+    let listHTML = "";
+    
+    // Check which products are actively selected
+    const activeProducts = {
+      dataprotect: true, // Always required for backup
+      fortknox: this.state.security.fortknox,
+      datahawk: this.state.security.datahawk,
+      smartfiles: this.state.workloads.files.active,
+      sitecontinuity: this.state.bcdr.siteContinuity && this.state.bcdr.replication !== "none",
+      gaia: this.state.workloads.vm.active || this.state.workloads.files.active // Suggested for indexed search
+    };
+
+    COHESITY_DATA.products.forEach(prod => {
+      const isActive = activeProducts[prod.id];
+      const activeClass = isActive ? "active" : "";
+      const bulletText = isActive ? "Active" : "Optional";
+      listHTML += `
+        <div class="rec-product-item ${activeClass}">
+          <div class="rec-product-bullet"></div>
+          <span class="rec-product-name">${prod.name}</span>
+          <span class="rec-product-tag">${bulletText}</span>
+        </div>
+      `;
+    });
+
+    this.dom.recProductList.innerHTML = listHTML;
+  }
+
+  updateChecklist(compliance) {
+    let checklistHTML = "";
+
+    // Security Hardening Checklist Rules
+    const securityChecks = [
+      { label: "DataLock snapshot immutability enforced (WORM)", pass: true },
+      { label: "Helios Control Plane Multi-Factor Auth (MFA)", pass: this.state.security.mfa },
+      { label: "Helios Multi-Party Approval (MPA) Quorum active", pass: this.state.security.mpa },
+      { label: "Isolated off-site air-gapped recovery (FortKnox)", pass: this.state.security.fortknox },
+      { label: "Real-time AI malware anomaly scanning (DataHawk)", pass: this.state.security.datahawk },
+      { label: "Enterprise Key Management integration (KMS)", pass: this.state.security.kms === "customer" }
+    ];
+
+    securityChecks.forEach(check => {
+      const icon = check.pass 
+        ? `<i class="material-icons-round check-icon" style="color:var(--accent-green)">check_circle</i>`
+        : `<i class="material-icons-round cross-icon" style="color:var(--accent-red)">cancel</i>`;
+      
+      checklistHTML += `
+        <div class="checklist-item">
+          ${icon}
+          <span>${check.label}</span>
+        </div>
+      `;
+    });
+
+    this.dom.checklist.innerHTML = checklistHTML;
+  }
+
+  updateIntegrationCode(tabId) {
+    const snippet = COHESITY_DATA.integrationSnippets[tabId];
+    if (snippet) {
+      document.getElementById("code-title").textContent = snippet.title;
+      document.getElementById("code-desc").textContent = snippet.description;
+      this.dom.codePre.textContent = snippet.code;
+    }
+  }
+
+  updateUI() {
+    this.updateSidebarStats();
+    this.renderTopologyDiagram();
+    
+    // Initialise code panel default to active tab
+    const activeTab = document.querySelector(".tab-btn.active").getAttribute("data-tab");
+    this.updateIntegrationCode(activeTab);
+  }
+
+  renderTopologyDiagram() {
+    const sizing = this.calculateSizing();
+    const isFortKnox = this.state.security.fortknox;
+    const isDataHawk = this.state.security.datahawk;
+    const replMode = this.state.bcdr.replication;
+    
+    let svgContent = `
+      <svg viewBox="0 0 800 380" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="greenGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#00ffb7" stop-opacity="0.9"/>
+            <stop offset="100%" stop-color="#00d68f" stop-opacity="0.6"/>
+          </linearGradient>
+          <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#00d2ff" stop-opacity="0.9"/>
+            <stop offset="100%" stop-color="#0084ff" stop-opacity="0.6"/>
+          </linearGradient>
+          <linearGradient id="purpleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#cc80ff" stop-opacity="0.9"/>
+            <stop offset="100%" stop-color="#a453f8" stop-opacity="0.6"/>
+          </linearGradient>
+          <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="8" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+          </filter>
+        </defs>
+
+        <!-- GRID BACKGROUND -->
+        <g stroke="#ffffff" stroke-opacity="0.02" stroke-width="1">
+          <line x1="0" y1="50" x2="800" y2="50" />
+          <line x1="0" y1="100" x2="800" y2="100" />
+          <line x1="0" y1="150" x2="800" y2="150" />
+          <line x1="0" y1="200" x2="800" y2="200" />
+          <line x1="0" y1="250" x2="800" y2="250" />
+          <line x1="0" y1="300" x2="800" y2="300" />
+          <line x1="100" y1="0" x2="100" y2="380" />
+          <line x1="200" y1="0" x2="200" y2="380" />
+          <line x1="300" y1="0" x2="300" y2="380" />
+          <line x1="400" y1="0" x2="400" y2="380" />
+          <line x1="500" y1="0" x2="500" y2="380" />
+          <line x1="600" y1="0" x2="600" y2="380" />
+          <line x1="700" y1="0" x2="700" y2="380" />
+        </g>
+    `;
+
+    // 1. WORKLOADS (Left column)
+    const activeWls = Object.keys(this.state.workloads).filter(k => this.state.workloads[k].active);
+    let wlStartY = 80;
+    const wlSpacing = 50;
+
+    activeWls.forEach((wlKey, idx) => {
+      const wl = this.state.workloads[wlKey];
+      const yPos = wlStartY + (idx * wlSpacing);
+      const iconChar = wlKey === "vm" ? "🖥️" : wlKey === "database" ? "🛢️" : wlKey === "files" ? "📁" : wlKey === "saas" ? "☁️" : "☸️";
+      
+      svgContent += `
+        <!-- Workload Link to Cluster -->
+        <path d="M 170 ${yPos} Q 250 ${yPos}, 330 190" fill="none" stroke="var(--accent-blue)" stroke-opacity="0.3" stroke-width="2" />
+        <path d="M 170 ${yPos} Q 250 ${yPos}, 330 190" class="flow-line" fill="none" stroke="var(--accent-blue)" stroke-opacity="0.8" stroke-width="2" />
+        
+        <!-- Workload Bubble -->
+        <g class="svg-hotspot" cursor="pointer" onclick="app.showHotspot('wl-${wlKey}')">
+          <circle cx="100" cy="${yPos}" r="22" fill="#121a2f" stroke="var(--accent-blue)" stroke-width="1.5" />
+          <text x="100" y="${yPos + 5}" font-size="16" text-anchor="middle">${iconChar}</text>
+          <text x="135" y="${yPos - 2}" font-size="11" font-family="Inter" font-weight="700" fill="white">${wlKey.toUpperCase()}</text>
+          <text x="135" y="${yPos + 10}" font-size="9" font-family="JetBrains Mono" fill="var(--text-secondary)">${wl.capacityTB} TB</text>
+        </g>
+      `;
+    });
+
+    if (activeWls.length === 0) {
+      svgContent += `
+        <text x="100" y="190" font-family="Inter" font-size="12" fill="var(--accent-red)" text-anchor="middle" font-weight="600">❌ No Workloads Active</text>
+      `;
+    }
+
+    // 2. PRIMARY COHESITY CLUSTER (Center)
+    const clusterX = 380;
+    const clusterY = 190;
+
+    svgContent += `
+      <!-- CLUSTER CONTAINER -->
+      <g class="svg-hotspot" cursor="pointer" onclick="app.showHotspot('cluster')">
+        <!-- DataHawk Scan rays behind cluster -->
+        ${isDataHawk ? `
+          <circle cx="${clusterX}" cy="${clusterY}" r="95" fill="none" stroke="var(--accent-purple)" stroke-width="1" stroke-dasharray="4,6" opacity="0.4" />
+          <circle cx="${clusterX}" cy="${clusterY}" r="75" class="pulse-circle" fill="none" stroke="var(--accent-purple)" stroke-width="1" opacity="0.5" />
+        ` : ''}
+
+        <rect x="${clusterX - 55}" y="${clusterY - 60}" width="110" height="120" rx="10" fill="#0d1424" stroke="var(--accent-green)" stroke-width="2" filter="url(#glow)" />
+        
+        <!-- Inside Cluster representation: Hardware nodes -->
+        <rect x="${clusterX - 45}" y="${clusterY - 45}" width="90" height="20" rx="4" fill="#18233c" stroke="var(--border-color)" />
+        <circle cx="${clusterX - 35}" cy="${clusterY - 35}" r="3" fill="var(--accent-green)" />
+        <line x1="${clusterX - 25}" y1="${clusterY - 35}" x2="${clusterX + 35}" y2="${clusterY - 35}" stroke="hsla(0,0%,100%,0.2)" stroke-width="4" stroke-dasharray="2,3" />
+
+        <rect x="${clusterX - 45}" y="${clusterY - 18}" width="90" height="20" rx="4" fill="#18233c" stroke="var(--border-color)" />
+        <circle cx="${clusterX - 35}" cy="${clusterY - 8}" r="3" fill="var(--accent-green)" />
+        <line x1="${clusterX - 25}" y1="${clusterY - 8}" x2="${clusterX + 35}" y2="${clusterY - 8}" stroke="hsla(0,0%,100%,0.2)" stroke-width="4" stroke-dasharray="2,3" />
+
+        <rect x="${clusterX - 45}" y="${clusterY + 10}" width="90" height="20" rx="4" fill="#18233c" stroke="var(--border-color)" />
+        <circle cx="${clusterX - 35}" cy="${clusterY + 20}" r="3" fill="var(--accent-green)" />
+        <line x1="${clusterX - 25}" y1="${clusterY + 20}" x2="${clusterX + 35}" y2="${clusterY + 20}" stroke="hsla(0,0%,100%,0.2)" stroke-width="4" stroke-dasharray="2,3" />
+
+        <text x="${clusterX}" y="${clusterY + 45}" font-family="Inter" font-size="9" fill="white" font-weight="600" text-anchor="middle">COHESITY CLUSTER</text>
+        <text x="${clusterX}" y="${clusterY + 54}" font-family="JetBrains Mono" font-size="8" fill="var(--accent-green)" text-anchor="middle" font-weight="700">
+          ${sizing.localNodeCount > 0 ? `${sizing.localNodeCount}x Nodes` : 'SaaS Pool'}
+        </text>
+
+        <!-- DataHawk scanner tag -->
+        ${isDataHawk ? `
+          <g transform="translate(${clusterX - 15}, ${clusterY - 80})">
+            <rect x="-35" y="-12" width="100" height="18" rx="4" fill="#a453f8" />
+            <text x="15" y="0" font-family="Inter" font-size="8" font-weight="700" fill="white" text-anchor="middle">🦅 DATAHAWK SCAN</text>
+          </g>
+        ` : ''}
+      </g>
+    `;
+
+    // 3. TARGET REPLICATIONS (Right Column)
+
+    // SaaS Cyber Vault (FortKnox) - Right Top
+    if (isFortKnox) {
+      const fkX = 630;
+      const fkY = 100;
+      
+      svgContent += `
+        <!-- Replication Link: Cluster to FortKnox -->
+        <path d="M ${clusterX + 55} ${clusterY - 30} Q 500 100, ${fkX - 60} ${fkY}" fill="none" stroke="var(--accent-purple)" stroke-width="1.5" stroke-dasharray="4,4" />
+        <path d="M ${clusterX + 55} ${clusterY - 30} Q 500 100, ${fkX - 60} ${fkY}" class="flow-line" fill="none" stroke="var(--accent-purple)" stroke-opacity="0.8" stroke-width="1.5" />
+
+        <!-- FortKnox Node Group -->
+        <g class="svg-hotspot" cursor="pointer" onclick="app.showHotspot('fortknox')">
+          <circle cx="${fkX}" cy="${fkY}" r="38" fill="none" stroke="var(--accent-purple)" stroke-width="1.5" stroke-dasharray="4,4" />
+          <circle cx="${fkX}" cy="${fkY}" r="30" fill="#0d1424" stroke="var(--accent-purple)" stroke-width="2" filter="url(#glow)" />
+          
+          <!-- Padlock Drawing -->
+          <path d="M ${fkX - 6} ${fkY - 4} L ${fkX - 6} ${fkY + 10} L ${fkX + 6} ${fkY + 10} L ${fkX + 6} ${fkY - 4} Z" fill="none" stroke="var(--accent-purple)" stroke-width="1.5"/>
+          <path d="M ${fkX - 4} ${fkY - 4} A 4 4 0 0 1 ${fkX + 4} ${fkY - 4}" fill="none" stroke="var(--accent-purple)" stroke-width="1.5"/>
+          <circle cx="${fkX}" cy="${fkY + 2}" r="1.5" fill="var(--accent-purple)"/>
+
+          <text x="${fkX}" y="${fkY + 54}" font-family="Inter" font-size="10" font-weight="700" fill="white" text-anchor="middle">FortKnox SaaS</text>
+          <text x="${fkX}" y="${fkY + 65}" font-family="JetBrains Mono" font-size="9" fill="var(--accent-purple)" text-anchor="middle" font-weight="700">Vault: ${sizing.fortKnoxVaultTB} TB</text>
+        </g>
+      `;
+    }
+
+    // Secondary Site or Public Cloud Edition - Right Bottom
+    if (replMode !== "none") {
+      const repX = 630;
+      const repY = 270;
+      let label = "Secondary Node";
+      let icon = "🏢";
+      let detail = `${sizing.usableLocalTB} TB Usable`;
+      let replColor = "var(--accent-blue)";
+      let flowColor = "var(--accent-blue)";
+      let hotspotId = "repl-second-site";
+
+      if (replMode === "cloud-edition") {
+        label = "Cloud Edition";
+        icon = "☁️ AWS/Azure";
+        detail = `${sizing.cloudNodeCount}x Virtual Nodes`;
+        replColor = "var(--accent-blue)";
+        flowColor = "var(--accent-blue)";
+        hotspotId = "repl-cloud-edition";
+      } else if (replMode === "saas-vault" && !isFortKnox) {
+        // Vault is configured but FortKnox check is off? (Sync issue). Make it SaaS storage pool.
+        label = "SaaS Storage";
+        icon = "📦";
+        detail = "Standard Cloud Storage";
+        replColor = "var(--text-secondary)";
+        flowColor = "hsla(0,0%,100%,0.2)";
+        hotspotId = "repl-saas";
+      }
+
+      svgContent += `
+        <!-- Replication Path to Secondary -->
+        <path d="M ${clusterX + 55} ${clusterY + 30} Q 500 270, ${repX - 50} ${repY}" fill="none" stroke="${flowColor}" stroke-opacity="0.3" stroke-width="1.5" />
+        <path d="M ${clusterX + 55} ${clusterY + 30} Q 500 270, ${repX - 50} ${repY}" class="flow-line" fill="none" stroke="${flowColor}" stroke-opacity="0.8" stroke-width="1.5" />
+
+        <g class="svg-hotspot" cursor="pointer" onclick="app.showHotspot('${hotspotId}')">
+          <rect x="${repX - 45}" y="${repY - 35}" width="90" height="70" rx="8" fill="#0d1424" stroke="${replColor}" stroke-width="1.5" />
+          <text x="${repX}" y="${repY - 8}" font-size="16" text-anchor="middle">${icon}</text>
+          <text x="${repX}" y="${repY + 12}" font-family="Inter" font-size="10" font-weight="700" fill="white" text-anchor="middle">${label}</text>
+          <text x="${repX}" y="${repY + 23}" font-family="JetBrains Mono" font-size="8" fill="${replColor}" text-anchor="middle" font-weight="600">${detail}</text>
+        </g>
+      `;
+    }
+
+    svgContent += `
+      </svg>
+    `;
+
+    this.dom.svgContainer.innerHTML = svgContent;
+  }
+
+  showHotspot(id) {
+    const details = {
+      "wl-vm": {
+        title: "VMware / Hyper-V Workloads",
+        content: `Sized Capacity: <strong>${this.state.workloads.vm.capacityTB} TB</strong><br>
+                  Expected Compound Growth: <strong>${this.state.workloads.vm.growth}% / year</strong><br>
+                  Target Deduplication Rate: <strong>${this.state.workloads.vm.dedupe}:1</strong><br>
+                  Recommended Policy: Cohesity DataProtect dynamic VM policies, leveraging vSphere Storage APIs (VADP) with CBT tracking for near-zero backup windows.`
+      },
+      "wl-database": {
+        title: "Database Tier Sizing",
+        content: `Sized Capacity: <strong>${this.state.workloads.database.capacityTB} TB</strong><br>
+                  Dedupe Factor: <strong>${this.state.workloads.database.dedupe}:1</strong><br>
+                  Database change rate is set to 5% daily. To facilitate instant recovery, Cohesity maps backups directly to its custom POSIX-compliant file system (SpanFS), mounting the SQL/Oracle datastore directly on the backup node for instantaneous spin-up.`
+      },
+      "wl-files": {
+        title: "Unstructured File Data (SmartFiles)",
+        content: `Capacity: <strong>${this.state.workloads.files.capacityTB} TB</strong><br>
+                  SmartFiles leverages global deduplication to tier cold objects. By integrating direct file protocol hooks (NFS/SMB), Cohesity acts as a scale-out NAS, offering rapid retrieval without consuming expensive primary SSD storage.`
+      },
+      "wl-saas": {
+        title: "SaaS App Protection",
+        content: `Capacity: <strong>${this.state.workloads.saas.capacityTB} TB</strong><br>
+                  Fully manages backup tasks for Microsoft 365 (Exchange, OneDrive, SharePoint, Teams) and Salesforce data. Runs completely agentless inside the Cohesity Cloud Services SaaS control plane.`
+      },
+      "wl-k8s": {
+        title: "Kubernetes Workloads",
+        content: `Capacity: <strong>${this.state.workloads.k8s.capacityTB} TB</strong><br>
+                  Integrates with CSI drivers to snapshot and store stateful Kubernetes volumes along with full application manifests (Helm, namespaces, deployment configurations) to accelerate microservice failover.`
+      },
+      "cluster": {
+        title: "Primary Cohesity Cluster",
+        content: `Calculated Local Node Count: <strong>${this.calculateSizing().localNodeCount} Nodes</strong><br>
+                  Model Type: <strong>${this.calculateSizing().nodeModelName}</strong><br>
+                  This scale-out hyperconverged cluster forms the core of your architectural design. It features global, variable-length deduplication, hardware compression, and built-in N+1 node survivability.`
+      },
+      "fortknox": {
+        title: "Cohesity FortKnox Cyber Vault",
+        content: `Sized Vault Storage: <strong>${this.calculateSizing().fortKnoxVaultTB} TB</strong><br>
+                  Ransomware Resilience: <strong>Immutability & Virtual Air-Gap</strong><br>
+                  Configures an outbound-only connection mapping backups directly into a secure, Cohesity-managed AWS cloud vault. Features strict compliance locks and multi-party quorum triggers preventing deletion actions during active attacks.`
+      },
+      "repl-second-site": {
+        title: "Disaster Recovery (Secondary Site)",
+        content: `Provides an identical physical node cluster mapped to a disaster recovery location. Mapped via Cohesity SiteContinuity for automated replication, runbook failover sequencing, and continuous DR readiness audits.`
+      },
+      "repl-cloud-edition": {
+        title: "Cloud Edition (Replication Target)",
+        content: `Calculated Target Virtual Nodes: <strong>${this.calculateSizing().cloudNodeCount} Nodes</strong><br>
+                  Runs directly inside public cloud VPC (AWS EC2 / Azure VMs) providing a replica backup pool. Supports instant recovery directly into AWS EC2 instances during primary site failure.`
+      }
+    };
+
+    const info = details[id];
+    if (info) {
+      this.dom.hotspotOverlay.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:4px;">
+          <strong style="color:var(--accent-green); font-size:12px;">${info.title}</strong>
+          <span style="cursor:pointer; color:var(--text-muted);" onclick="app.closeHotspot()">✕</span>
+        </div>
+        <div>${info.content}</div>
+      `;
+      this.dom.hotspotOverlay.style.display = "block";
+    }
+  }
+
+  closeHotspot() {
+    this.dom.hotspotOverlay.style.display = "none";
+  }
+
+  generateReportAndPrint() {
+    const sizing = this.calculateSizing();
+    const compliance = this.calculateComplianceScore();
+
+    // Renders structural data inside the print section
+    let workloadsHTML = "";
+    Object.keys(this.state.workloads).forEach(type => {
+      const wl = this.state.workloads[type];
+      if (wl.active) {
+        workloadsHTML += `
+          <tr>
+            <td>${COHESITY_DATA.workloadPresets[type].name}</td>
+            <td>${wl.capacityTB} TB</td>
+            <td>${wl.growth}%</td>
+            <td>${wl.dedupe}:1</td>
+            <td>${wl.retentionDays} Days</td>
+          </tr>
+        `;
+      }
+    });
+
+    let checklistHTML = "";
+    compliance.deductList.forEach(item => {
+      checklistHTML += `
+        <div style="margin-bottom: 6px; font-size: 10pt; color: #a83232;">
+          ⚠️ ${item}
+        </div>
+      `;
+    });
+    if (compliance.deductList.length === 0) {
+      checklistHTML = `<div style="color: #2b701d; font-weight: bold;">✅ Exemplary Cyber Security: All primary hardening checks are passing!</div>`;
+    }
+
+    const printWrapper = document.getElementById("printable-report-wrapper");
+    printWrapper.innerHTML = `
+      <div class="print-page">
+        <div class="print-header">
+          <div>
+            <h1>Cohesity Solution Design</h1>
+            <p style="font-size: 10pt; color: #666; margin-top: 4px;">Prepared for: ${this.state.project.name} | Sector: ${this.state.project.industry}</p>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-weight: bold; font-size: 12pt;">Cohesity Architect Toolkit</div>
+            <div style="font-size: 8pt; color: #888;">Generated: 2026-05-30</div>
+          </div>
+        </div>
+
+        <div class="print-section">
+          <h2>1. Executive Summary</h2>
+          <p>This technical architecture proposal outlines the deployment parameters of a Cohesity DataCloud resilient storage cluster. Sized to meet a front-end workload footprint of <strong>${sizing.frontEndTB} TB</strong>, the system consolidates backup datasets into an integrated, secure scale-out pool reducing storage overhead through deduplication and compression.</p>
+          
+          <div class="print-bom-summary">
+            <div class="print-bom-col">
+              <h3>Front-End Data</h3>
+              <div class="print-bom-val">${sizing.frontEndTB} TB</div>
+            </div>
+            <div class="print-bom-col">
+              <h3>Sized Usable Storage</h3>
+              <div class="print-bom-val" style="color:var(--accent-blue)">${sizing.usableLocalTB} TB</div>
+            </div>
+            <div class="print-bom-col">
+              <h3>Cyber Resiliency Score</h3>
+              <div class="print-bom-val" style="color:#ff9900">${compliance.score}/100</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="print-section">
+          <h2>2. Recommended Hardware Configuration (BOM)</h2>
+          <table class="print-table">
+            <thead>
+              <tr>
+                <th>Component / License</th>
+                <th>Quantity</th>
+                <th>Sizing / Model Details</th>
+                <th>Architectural Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Cohesity Nodes</strong></td>
+                <td>${sizing.localNodeCount > 0 ? `${sizing.localNodeCount}x Nodes` : 'SaaS'}</td>
+                <td>${sizing.nodeRecommendation}</td>
+                <td>Primary backup ingestion, storage deduplication, and instant restores</td>
+              </tr>
+              <tr>
+                <td><strong>Cohesity DataProtect Subscription</strong></td>
+                <td>${sizing.frontEndTB} TB</td>
+                <td>Front-End Capacity Licensing</td>
+                <td>Agentless backup & rapid mass restore licenses for active workloads</td>
+              </tr>
+              ${this.state.security.fortknox ? `
+                <tr>
+                  <td><strong>Cohesity FortKnox Vault License</strong></td>
+                  <td>${sizing.fortKnoxVaultTB} TB</td>
+                  <td>SaaS-managed Cloud Vaulting (AWS Cold Storage)</td>
+                  <td>Virtual air-gapped immutable copy providing protection against ransomware root-deletion</td>
+                </tr>
+              ` : ''}
+              ${this.state.security.datahawk ? `
+                <tr>
+                  <td><strong>Cohesity DataHawk Subscription</strong></td>
+                  <td>${sizing.frontEndTB} TB</td>
+                  <td>AI Threat Detection & Classification</td>
+                  <td>ML anomaly identification, Yara signature malware scans, and sensitive data PII indexing</td>
+                </tr>
+              ` : ''}
+              ${this.state.bcdr.siteContinuity ? `
+                <tr>
+                  <td><strong>Cohesity SiteContinuity License</strong></td>
+                  <td>Active</td>
+                  <td>Disaster Recovery Orchestrator</td>
+                  <td>Automates multi-tier app failover workflows and sandbox compliance reporting</td>
+                </tr>
+              ` : ''}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="print-section">
+          <h2>3. Protected Workloads Profile</h2>
+          <table class="print-table">
+            <thead>
+              <tr>
+                <th>Workload Category</th>
+                <th>Sized Capacity</th>
+                <th>Growth Rate (Annual)</th>
+                <th>Deduplication Preset</th>
+                <th>Retention SLA</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${workloadsHTML}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="print-page" style="page-break-before: always;">
+        <div class="print-header">
+          <h1>Cohesity Solution Design (Cont.)</h1>
+          <div style="font-size: 8pt; color: #888;">Project: ${this.state.project.name}</div>
+        </div>
+
+        <div class="print-section">
+          <h2>4. Security Hardening & Cyber Resiliency Assessment</h2>
+          <p style="margin-bottom: 12px;">Cohesity features a Zero Trust architecture. The table below represents the active hardening controls implemented within this proposed design layout:</p>
+          <table class="print-table">
+            <thead>
+              <tr>
+                <th>Security Control Item</th>
+                <th>Implementation Status</th>
+                <th>Value Proposition</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Helios Control Plane Access</td>
+                <td><span class="print-badge" style="${this.state.security.mfa ? 'background:#e2fbe8;color:#1e7e34;' : 'background:#fce8e6;color:#a83232;'}">${this.state.security.mfa ? 'MFA ACTIVE' : 'DISABLED'}</span></td>
+                <td>Restricts backup control access through multi-factor validation logs.</td>
+              </tr>
+              <tr>
+                <td>Multi-Party Quorum Approval (MPA)</td>
+                <td><span class="print-badge" style="${this.state.security.mpa ? 'background:#e2fbe8;color:#1e7e34;' : 'background:#fce8e6;color:#a83232;'}">${this.state.security.mpa ? 'MPA ENFORCED' : 'DISABLED'}</span></td>
+                <td>Forces security team approvals before destructive actions or snapshot deletions occur.</td>
+              </tr>
+              <tr>
+                <td>Data Immutability (DataLock)</td>
+                <td><span class="print-badge" style="background:#e2fbe8;color:#1e7e34;">WORM ENFORCED</span></td>
+                <td>Prevents alteration or administrative deletion of snapshots once captured.</td>
+              </tr>
+              <tr>
+                <td>External Key Management System</td>
+                <td><span class="print-badge">${this.state.security.kms === "customer" ? 'CUSTOMER KMS' : 'DEFAULT'}</span></td>
+                <td>Encrypts all data at rest using isolated corporate encryption key chains.</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3 style="font-size: 13px; margin: 16px 0 8px 0; color: #1a1a1a;">Resiliency Gap Analysis & Risks Identified:</h3>
+          ${checklistHTML}
+        </div>
+
+        <div class="print-section">
+          <h2>5. Integration Playbook Roadmap</h2>
+          <p>Successful implementation coordinates Cohesity controls with standard enterprise workflows:</p>
+          <div style="margin-top: 10px; border-left: 3px solid #00d68f; padding-left: 12px; font-size: 10pt;">
+            <strong>Phase 1: Cluster Network Setup</strong><br>
+            Provision VLAN networks with 10GbE / 25GbE connectivity. Direct outbound HTTPS firewall rules for Cohesity Helios SaaS telemetry and Cohesity FortKnox cloud endpoints.
+          </div>
+          <div style="margin-top: 10px; border-left: 3px solid #00d68f; padding-left: 12px; font-size: 10pt;">
+            <strong>Phase 2: Snapshot Protection Setup</strong><br>
+            Configure VMware VCenter credential bindings. Apply backup SLA policies mapping database workloads to RPO/RTO goals.
+          </div>
+          <div style="margin-top: 10px; border-left: 3px solid #00d68f; padding-left: 12px; font-size: 10pt;">
+            <strong>Phase 3: Security & SIEM Connection</strong><br>
+            Configure API webhooks connecting Cohesity DataHawk threat anomaly feeds into enterprise SIEM (Splunk, Microsoft Sentinel) for immediate security operations alerting.
+          </div>
+        </div>
+      </div>
+    `;
+
+    window.print();
+  }
+}
+
+// Instantiate and initialize the app
+const app = new CohesityArchitectWizard();
+document.addEventListener("DOMContentLoaded", () => {
+  app.init();
+});
+window.app = app;
