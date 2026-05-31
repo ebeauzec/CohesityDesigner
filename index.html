@@ -160,6 +160,28 @@
         <div class="wizard-step" id="step-2">
           <h2 class="step-title">Workloads & Capacities</h2>
           <p class="step-subtitle">Enable protection components and define front-end storage sizes and growth parameters.</p>
+
+          <!-- Sites / Data Center Management -->
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <span class="form-label" style="margin-bottom: 0; font-size: 13px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                <span class="material-symbols-outlined" style="color: var(--accent-blue); font-size: 18px;">corporate_fare</span>
+                Configure Target Sites / Data Centers
+              </span>
+              <button type="button" id="btn-add-site" class="btn-primary" style="padding: 6px 12px; font-size: 11px; display: flex; align-items: center; gap: 4px; border-radius: 6px; background: var(--accent-blue); border: none; color: white; cursor: pointer; transition: background 0.2s;">
+                <span class="material-symbols-outlined" style="font-size: 14px;">add</span> Add Site
+              </button>
+            </div>
+            
+            <div id="sites-tabs-container" style="display: flex; flex-wrap: wrap; gap: 8px;">
+              <!-- tabs will be dynamically injected here -->
+            </div>
+            
+            <div id="active-site-rename-container" style="display: flex; align-items: center; gap: 8px; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px;">
+              <span class="form-label" style="margin-bottom: 0; font-size: 11px; color: var(--text-secondary);">Rename Active Site:</span>
+              <input type="text" id="active-site-name-input" class="number-override-input" style="width: 220px; text-align: left; padding: 4px 8px; border-radius: 4px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); color: white;" value="Primary Data Center">
+            </div>
+          </div>
           
           <!-- VMware VMs -->
           <div class="toggle-card" id="wl-card-vm">

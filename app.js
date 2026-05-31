@@ -11,13 +11,20 @@ class CohesityArchitectWizard {
         industry: "Finance",
         compliance: ["gdpr", "nis2"]
       },
-      workloads: {
-        vm: { active: true, capacityTB: 50, growth: 10, dedupe: 2.5, retentionDays: 30, windowHours: 8 },
-        database: { active: true, capacityTB: 20, growth: 15, dedupe: 3.0, retentionDays: 14, windowHours: 8 },
-        files: { active: false, capacityTB: 100, growth: 20, dedupe: 1.4, retentionDays: 90, windowHours: 8 },
-        saas: { active: false, capacityTB: 10, growth: 12, dedupe: 2.0, retentionDays: 365, windowHours: 8 },
-        k8s: { active: false, capacityTB: 5, growth: 15, dedupe: 2.0, retentionDays: 30, windowHours: 8 }
-      },
+      sites: [
+        {
+          id: "site-primary",
+          name: "Primary Data Center",
+          workloads: {
+            vm: { active: true, capacityTB: 50, growth: 10, dedupe: 2.5, retentionDays: 30, windowHours: 8 },
+            database: { active: true, capacityTB: 20, growth: 15, dedupe: 3.0, retentionDays: 14, windowHours: 8 },
+            files: { active: false, capacityTB: 100, growth: 20, dedupe: 1.4, retentionDays: 90, windowHours: 8 },
+            saas: { active: false, capacityTB: 10, growth: 12, dedupe: 2.0, retentionDays: 365, windowHours: 8 },
+            k8s: { active: false, capacityTB: 5, growth: 15, dedupe: 2.0, retentionDays: 30, windowHours: 8 }
+          }
+        }
+      ],
+      activeSiteId: "site-primary",
       bcdr: {
         rpo: "1hr",
         rto: "4hr",
@@ -37,13 +44,127 @@ class CohesityArchitectWizard {
       }
     };
 
+    Object.defineProperty(this.state, 'workloads', {
+      get: () => this.getActiveSite().workloads,
+      configurable: true,
+      enumerable: true
+    });
+
     // DOM Elements Cache
     this.dom = {};
+  }
+
+  getActiveSite() {
+    return this.state.sites.find(s => s.id === this.state.activeSiteId) || this.state.sites[0];
+  }
+
+  renderSitesManagerUI() {
+    const container = document.getElementById("sites-tabs-container");
+    if (!container) return;
+
+    container.innerHTML = "";
+    this.state.sites.forEach((site, index) => {
+      const tab = document.createElement("div");
+      tab.className = `selectable-item ${site.id === this.state.activeSiteId ? "selected" : ""}`;
+      tab.style.cssText = "display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 11.5px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border-color); background: rgba(255,255,255,0.02); transition: all 0.2s;";
+      
+      if (site.id === this.state.activeSiteId) {
+        tab.style.borderColor = "var(--accent-blue)";
+        tab.style.background = "rgba(0,145,255,0.08)";
+      }
+
+      // Site Name Text
+      const nameSpan = document.createElement("span");
+      nameSpan.textContent = site.name;
+      nameSpan.style.fontWeight = "600";
+      tab.appendChild(nameSpan);
+
+      // Sizing info on tab
+      let siteFE = 0;
+      Object.keys(site.workloads).forEach(type => {
+        if (site.workloads[type].active) {
+          siteFE += site.workloads[type].capacityTB;
+        }
+      });
+      const sizeSpan = document.createElement("span");
+      sizeSpan.textContent = `(${siteFE} TB)`;
+      sizeSpan.style.cssText = "font-size: 9.5px; color: var(--text-secondary); font-family: 'JetBrains Mono';";
+      tab.appendChild(sizeSpan);
+
+      // Delete Button (only if not primary site and more than 1 site exists)
+      if (site.id !== "site-primary" && this.state.sites.length > 1) {
+        const deleteBtn = document.createElement("span");
+        deleteBtn.className = "material-symbols-outlined";
+        deleteBtn.textContent = "close";
+        deleteBtn.style.cssText = "font-size: 12px; color: var(--text-muted); cursor: pointer; margin-left: 4px; transition: color 0.2s;";
+        deleteBtn.addEventListener("mouseover", () => { deleteBtn.style.color = "var(--accent-red)"; });
+        deleteBtn.addEventListener("mouseout", () => { deleteBtn.style.color = "var(--text-muted)"; });
+        deleteBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.deleteSite(site.id);
+        });
+        tab.appendChild(deleteBtn);
+      }
+
+      // Tab Selection Click
+      tab.addEventListener("click", () => {
+        this.selectSite(site.id);
+      });
+
+      container.appendChild(tab);
+    });
+
+    // Sync Rename Input Field
+    const activeSite = this.getActiveSite();
+    const renameInput = document.getElementById("active-site-name-input");
+    if (renameInput) {
+      renameInput.value = activeSite.name;
+    }
+  }
+
+  selectSite(siteId) {
+    this.state.activeSiteId = siteId;
+    this.renderSitesManagerUI();
+    this.loadWorkloadPresets(); // Re-loads currently active workloads into inputs
+    this.updateSidebarStats();
+    this.renderTopologyDiagram();
+  }
+
+  deleteSite(siteId) {
+    const index = this.state.sites.findIndex(s => s.id === siteId);
+    if (index !== -1) {
+      this.state.sites.splice(index, 1);
+      if (this.state.activeSiteId === siteId) {
+        this.state.activeSiteId = this.state.sites[0].id;
+      }
+      this.renderSitesManagerUI();
+      this.loadWorkloadPresets();
+      this.updateSidebarStats();
+      this.renderTopologyDiagram();
+    }
+  }
+
+  addNewSite() {
+    const id = `site-${Date.now()}`;
+    const name = `Remote Site ${this.state.sites.length + 1}`;
+    
+    // Copy defaults from workloadPreset defaults
+    const workloads = {
+      vm: { active: true, capacityTB: 50, growth: 10, dedupe: 2.5, retentionDays: 30, windowHours: 8 },
+      database: { active: false, capacityTB: 20, growth: 15, dedupe: 3.0, retentionDays: 14, windowHours: 8 },
+      files: { active: false, capacityTB: 100, growth: 20, dedupe: 1.4, retentionDays: 90, windowHours: 8 },
+      saas: { active: false, capacityTB: 10, growth: 12, dedupe: 2.0, retentionDays: 365, windowHours: 8 },
+      k8s: { active: false, capacityTB: 5, growth: 15, dedupe: 2.0, retentionDays: 30, windowHours: 8 }
+    };
+
+    this.state.sites.push({ id, name, workloads });
+    this.selectSite(id);
   }
 
   init() {
     this.cacheDomElements();
     this.bindEvents();
+    this.renderSitesManagerUI();
     this.loadWorkloadPresets();
     this.updateUI();
   }
@@ -147,6 +268,23 @@ class CohesityArchitectWizard {
       });
     });
 
+    // Step 2 Sites Management Events
+    const addSiteBtn = document.getElementById("btn-add-site");
+    if (addSiteBtn) {
+      addSiteBtn.addEventListener("click", () => this.addNewSite());
+    }
+
+    const renameInput = document.getElementById("active-site-name-input");
+    if (renameInput) {
+      renameInput.addEventListener("input", (e) => {
+        const activeSite = this.getActiveSite();
+        activeSite.name = e.target.value || "Data Center";
+        this.renderSitesManagerUI(); // Redraw tabs to update name
+        this.updateSidebarStats();
+        this.renderTopologyDiagram();
+      });
+    }
+
     // Step 2: Workloads Setup (Checkboxes & Sliders)
     const workloadTypes = ["vm", "database", "files", "saas", "k8s"];
     workloadTypes.forEach(type => {
@@ -174,6 +312,7 @@ class CohesityArchitectWizard {
           card.classList.remove("selected");
           document.getElementById(`wl-controls-${type}`).style.display = "none";
         }
+        this.renderSitesManagerUI();
         this.updateSidebarStats();
         this.renderTopologyDiagram();
       });
@@ -182,6 +321,7 @@ class CohesityArchitectWizard {
       range.addEventListener("input", (e) => {
         num.value = e.target.value;
         this.state.workloads[type].capacityTB = parseFloat(e.target.value);
+        this.renderSitesManagerUI();
         this.updateSidebarStats();
         this.renderTopologyDiagram();
       });
@@ -193,6 +333,7 @@ class CohesityArchitectWizard {
         range.value = val;
         num.value = val;
         this.state.workloads[type].capacityTB = val;
+        this.renderSitesManagerUI();
         this.updateSidebarStats();
         this.renderTopologyDiagram();
       });
@@ -358,6 +499,9 @@ class CohesityArchitectWizard {
       if (data.active) {
         document.getElementById(`wl-card-${type}`).classList.add("selected");
         document.getElementById(`wl-controls-${type}`).style.display = "block";
+      } else {
+        document.getElementById(`wl-card-${type}`).classList.remove("selected");
+        document.getElementById(`wl-controls-${type}`).style.display = "none";
       }
 
       range.value = data.capacityTB;
@@ -423,6 +567,8 @@ class CohesityArchitectWizard {
     let totalFrontEndTB = 0;
     let totalUsableNeededTB = 0;
     let activeWorkloadsCount = 0;
+    let dbActive = false;
+    let dbCapacity = 0;
 
     // Standard Grandfather-Father-Son retention formula overhead factor
     // Let's calculate base multiplier:
@@ -430,28 +576,35 @@ class CohesityArchitectWizard {
     // GFS retention overhead factors:
     // VMs: 1.3, DB: 1.15, Files: 1.4, SaaS: 1.8, Kubernetes: 1.25
 
-    Object.keys(this.state.workloads).forEach(type => {
-      const wl = this.state.workloads[type];
-      if (wl.active) {
-        activeWorkloadsCount++;
-        totalFrontEndTB += wl.capacityTB;
+    this.state.sites.forEach(site => {
+      Object.keys(site.workloads).forEach(type => {
+        const wl = site.workloads[type];
+        if (wl.active) {
+          activeWorkloadsCount++;
+          totalFrontEndTB += wl.capacityTB;
 
-        // Apply growth compounded over 3 years: F = P * (1 + r)^3
-        const compoundedCapacity = wl.capacityTB * Math.pow(1 + (wl.growth / 100), 3);
-        
-        // Apply Deduplication & Compression ratio reduction
-        const deduplicatedCapacity = compoundedCapacity / wl.dedupe;
+          if (type === "database") {
+            dbActive = true;
+            dbCapacity += wl.capacityTB;
+          }
 
-        // Apply retention policy multiplier based on workload properties
-        let retentionMultiplier = 1.1; // Baseline
-        if (type === "vm") retentionMultiplier = 1.35; // Standard VMs with snapshots
-        if (type === "database") retentionMultiplier = 1.15; // Database logs, short retention
-        if (type === "files") retentionMultiplier = 1.45; // SmartFiles data, longer archives
-        if (type === "saas") retentionMultiplier = 1.85; // SaaS archives, long legal hold (365d)
-        if (type === "k8s") retentionMultiplier = 1.25; // Dev/K8s backups
+          // Apply growth compounded over 3 years: F = P * (1 + r)^3
+          const compoundedCapacity = wl.capacityTB * Math.pow(1 + (wl.growth / 100), 3);
+          
+          // Apply Deduplication & Compression ratio reduction
+          const deduplicatedCapacity = compoundedCapacity / wl.dedupe;
 
-        totalUsableNeededTB += (deduplicatedCapacity * retentionMultiplier);
-      }
+          // Apply retention policy multiplier based on workload properties
+          let retentionMultiplier = 1.1; // Baseline
+          if (type === "vm") retentionMultiplier = 1.35; // Standard VMs with snapshots
+          if (type === "database") retentionMultiplier = 1.15; // Database logs, short retention
+          if (type === "files") retentionMultiplier = 1.45; // SmartFiles data, longer archives
+          if (type === "saas") retentionMultiplier = 1.85; // SaaS archives, long legal hold (365d)
+          if (type === "k8s") retentionMultiplier = 1.25; // Dev/K8s backups
+
+          totalUsableNeededTB += (deduplicatedCapacity * retentionMultiplier);
+        }
+      });
     });
 
     // If replica is on secondary site or cloud edition self-managed, double the capacity requirements
@@ -478,8 +631,7 @@ class CohesityArchitectWizard {
       nodeModelName = "SaaS Storage Subscription";
     } else {
       // Determine physical nodes layout based on user preferences and Database volumes
-      const isDatabaseHeavy = (this.state.workloads.database.active && 
-                               (this.state.workloads.database.capacityTB / (totalFrontEndTB || 1) > 0.35));
+      const isDatabaseHeavy = (dbActive && (dbCapacity / (totalFrontEndTB || 1) > 0.35));
       const performanceTier = (this.state.deployment.nodePreference === "flash" || isDatabaseHeavy);
 
       if (performanceTier) {
@@ -527,24 +679,26 @@ class CohesityArchitectWizard {
     let totalIngestRawMbps = 0;
     let totalIngestDedupeMbps = 0;
 
-    Object.keys(this.state.workloads).forEach(type => {
-      const wl = this.state.workloads[type];
-      if (wl.active) {
-        const preset = COHESITY_DATA.workloadPresets[type];
-        const changeRate = preset ? preset.dailyChangeRate : 3; // %
-        const rawChange = wl.capacityTB * (changeRate / 100);
-        const dedupeChange = rawChange / wl.dedupe;
-        
-        dailyChangeRawTB += rawChange;
-        dailyChangeDedupeTB += dedupeChange;
+    this.state.sites.forEach(site => {
+      Object.keys(site.workloads).forEach(type => {
+        const wl = site.workloads[type];
+        if (wl.active) {
+          const preset = COHESITY_DATA.workloadPresets[type];
+          const changeRate = preset ? preset.dailyChangeRate : 3; // %
+          const rawChange = wl.capacityTB * (changeRate / 100);
+          const dedupeChange = rawChange / wl.dedupe;
+          
+          dailyChangeRawTB += rawChange;
+          dailyChangeDedupeTB += dedupeChange;
 
-        const windowHours = wl.windowHours || 8;
-        const wlRawMbps = (rawChange * 8000000) / (windowHours * 3600);
-        const wlDedupeMbps = (dedupeChange * 8000000) / (windowHours * 3600);
+          const windowHours = wl.windowHours || 8;
+          const wlRawMbps = (rawChange * 8000000) / (windowHours * 3600);
+          const wlDedupeMbps = (dedupeChange * 8000000) / (windowHours * 3600);
 
-        totalIngestRawMbps += wlRawMbps;
-        totalIngestDedupeMbps += wlDedupeMbps;
-      }
+          totalIngestRawMbps += wlRawMbps;
+          totalIngestDedupeMbps += wlDedupeMbps;
+        }
+      });
     });
 
     let ingestHours = 8;
@@ -918,13 +1072,13 @@ class CohesityArchitectWizard {
 
     // 1. Generate Executive Summary text
     const activeWls = Object.keys(this.state.workloads)
-      .filter(w => this.state.workloads[w].active)
+      .filter(w => this.state.sites.some(site => site.workloads[w] && site.workloads[w].active))
       .map(w => COHESITY_DATA.workloadPresets[w].name.split(" (")[0]);
       
     const complianceNames = this.state.project.compliance
       .map(c => COHESITY_DATA.complianceFrameworks[c] ? COHESITY_DATA.complianceFrameworks[c].name.split(" ")[0] : c.toUpperCase());
       
-    let summaryText = `This technical architecture proposal outlines the deployment parameters of a Cohesity DataCloud resilient storage cluster sized for <strong>${this.state.project.name}</strong> (Industry: <strong>${this.state.project.industry}</strong>). <br><br>`;
+    let summaryText = `This technical architecture proposal outlines the deployment parameters of a Cohesity DataCloud resilient storage cluster sized for <strong>${this.state.project.name}</strong> (Industry: <strong>${this.state.project.industry}</strong>). The design consolidates protection across <strong>${this.state.sites.length} site(s)</strong> (${this.state.sites.map(s => s.name).join(", ")}).<br><br>`;
     summaryText += `To protect your front-end workload footprint of <strong>${sizing.frontEndTB} TB</strong> (consisting of ${activeWls.join(", ")}), the system establishes an integrated hyperconverged scale-out storage mesh. Compounded over a 3-year growth forecast and adjusted for GFS snapshot retention targets, the calculated usable storage requirement stands at <strong>${sizing.usableLocalTB} TB</strong>.<br><br>`;
     
     if (this.state.deployment.model === "saas") {
@@ -1175,7 +1329,7 @@ class CohesityArchitectWizard {
     const compliance = this.calculateComplianceScore();
     
     const activeWls = Object.keys(this.state.workloads)
-      .filter(w => this.state.workloads[w].active)
+      .filter(w => this.state.sites.some(site => site.workloads[w] && site.workloads[w].active))
       .map(w => COHESITY_DATA.workloadPresets[w].name.split(" (")[0]);
       
     const complianceNames = this.state.project.compliance
@@ -1190,7 +1344,7 @@ Date: 2026-05-31
 
 1. EXECUTIVE SUMMARY
 ---------------------
-This technical architecture proposal outlines the deployment parameters of a Cohesity DataCloud resilient storage cluster. Sized to meet a front-end workload footprint of ${sizing.frontEndTB} TB (consisting of: ${activeWls.join(", ")}), the system establishes an integrated hyperconverged scale-out storage mesh. Compounded over a 3-year growth forecast and adjusted for GFS snapshot retention targets, the calculated usable storage requirement stands at ${sizing.usableLocalTB} TB.
+This technical architecture proposal outlines the deployment parameters of a Cohesity DataCloud resilient storage cluster. Sized to meet a front-end workload footprint of ${sizing.frontEndTB} TB (consisting of: ${activeWls.join(", ")}), the system establishes an integrated hyperconverged scale-out storage mesh. The design consolidates protection across ${this.state.sites.length} site(s) (${this.state.sites.map(s => s.name).join(", ")}). Compounded over a 3-year growth forecast and adjusted for GFS snapshot retention targets, the calculated usable storage requirement stands at ${sizing.usableLocalTB} TB.
 
 Deployment model: ${this.state.deployment.model.toUpperCase()} Cloud Scenario.
 Recommended primary cluster configuration: ${sizing.nodeRecommendation}.
@@ -1366,45 +1520,58 @@ Security checks log:
           <line x1="400" y1="0" x2="400" y2="380" />
           <line x1="500" y1="0" x2="500" y2="380" />
           <line x1="600" y1="0" x2="600" y2="380" />
-          <line x1="700" y1="0" x2="700" y2="380" />
         </g>
-    `;
+      `;
  
-    // 1. WORKLOADS (Left column)
-    const activeWls = Object.keys(this.state.workloads).filter(k => this.state.workloads[k].active);
+      // 1. SITES (Left column)
+      const sites = this.state.sites;
     let wlStartY = 80;
-    const wlSpacing = 50;
- 
-    activeWls.forEach((wlKey, idx) => {
-      const wl = this.state.workloads[wlKey];
+    const wlSpacing = Math.max(50, Math.min(80, 240 / (sites.length || 1)));
+
+    sites.forEach((site, idx) => {
       const yPos = wlStartY + (idx * wlSpacing);
-      const iconChar = wlKey === "vm" ? "🖥️" : wlKey === "database" ? "🛢️" : wlKey === "files" ? "📁" : wlKey === "saas" ? "☁️" : "☸️";
+      const iconChar = "corporate_fare";
       
-      const wlPreset = COHESITY_DATA.workloadPresets[wlKey];
-      const dailyRate = wlPreset ? wlPreset.dailyChangeRate : 3;
-      const rawChange = wl.capacityTB * (dailyRate / 100);
-      const dedupeChange = rawChange / wl.dedupe;
-      const wlIngestMbps = Math.ceil((dedupeChange * 8000000) / ((wl.windowHours || 8) * 3600));
-      const wlIngestMBs = (wlIngestMbps / 8).toFixed(1).replace(/\.0$/, "");
- 
+      let siteCapacityTB = 0;
+      let siteIngestRawMbps = 0;
+      let siteIngestDedupeMbps = 0;
+
+      Object.keys(site.workloads).forEach(wlKey => {
+        const wl = site.workloads[wlKey];
+        if (wl.active) {
+          siteCapacityTB += wl.capacityTB;
+          const preset = COHESITY_DATA.workloadPresets[wlKey];
+          const dailyRate = preset ? preset.dailyChangeRate : 3;
+          const rawChange = wl.capacityTB * (dailyRate / 100);
+          const dedupeChange = rawChange / wl.dedupe;
+
+          const windowHours = wl.windowHours || 8;
+          siteIngestRawMbps += (rawChange * 8000000) / (windowHours * 3600);
+          siteIngestDedupeMbps += (dedupeChange * 8000000) / (windowHours * 3600);
+        }
+      });
+
+      const siteDedupeMbps = Math.ceil(siteIngestDedupeMbps);
+      const siteDedupeMBs = (siteDedupeMbps / 8).toFixed(1).replace(/\.0$/, "");
+
       svgContent += `
-        <!-- Workload Link to Cluster -->
+        <!-- Site Link to Cluster -->
         <path d="M 170 ${yPos} Q 250 ${yPos}, 330 190" fill="none" stroke="var(--accent-blue)" stroke-opacity="0.3" stroke-width="2" />
         <path d="M 170 ${yPos} Q 250 ${yPos}, 330 190" class="flow-line" fill="none" stroke="var(--accent-blue)" stroke-opacity="0.8" stroke-width="2" />
         
-        <!-- Workload Bubble -->
-        <g class="svg-hotspot" cursor="pointer" onclick="app.showHotspot('wl-${wlKey}')">
+        <!-- Site Bubble -->
+        <g class="svg-hotspot" cursor="pointer" onclick="app.showHotspot('site-${site.id}')">
           <circle cx="100" cy="${yPos}" r="22" fill="#121a2f" stroke="var(--accent-blue)" stroke-width="1.5" />
-          <text x="100" y="${yPos + 5}" font-size="16" text-anchor="middle">${iconChar}</text>
-          <text x="135" y="${yPos - 2}" font-size="11" font-family="Inter" font-weight="700" fill="white">${wlKey.toUpperCase()}</text>
-          <text x="135" y="${yPos + 10}" font-size="9" font-family="JetBrains Mono" fill="var(--text-secondary)">${wl.capacityTB} TB (~${wlIngestMbps} Mbps / ${wlIngestMBs} MB/s)</text>
+          <text x="100" y="${yPos + 5}" font-family="Material Symbols Outlined" font-size="16" fill="var(--accent-blue)" text-anchor="middle">corporate_fare</text>
+          <text x="135" y="${yPos - 2}" font-family="Inter" font-size="11" font-weight="700" fill="white">${site.name.toUpperCase()}</text>
+          <text x="135" y="${yPos + 10}" font-size="9" font-family="JetBrains Mono" fill="var(--text-secondary)">${siteCapacityTB} TB (~${siteDedupeMbps} Mbps / ${siteDedupeMBs} MB/s)</text>
         </g>
       `;
     });
 
-    if (activeWls.length === 0) {
+    if (sites.length === 0) {
       svgContent += `
-        <text x="100" y="190" font-family="Inter" font-size="12" fill="var(--accent-red)" text-anchor="middle" font-weight="600">❌ No Workloads Active</text>
+        <text x="100" y="190" font-family="Inter" font-size="12" fill="var(--accent-red)" text-anchor="middle" font-weight="600">❌ No Sites Configured</text>
       `;
     }
 
@@ -1541,6 +1708,58 @@ Security checks log:
   }
 
   showHotspot(id) {
+    if (id.startsWith("site-")) {
+      const siteId = id.replace("site-", "");
+      const site = this.state.sites.find(s => s.id === siteId);
+      if (site) {
+        let content = `Site Name: <strong>${site.name}</strong><br>`;
+        let activeWls = [];
+        let siteFE = 0;
+        let siteIngestDedupeMbps = 0;
+        
+        Object.keys(site.workloads).forEach(type => {
+          const wl = site.workloads[type];
+          if (wl.active) {
+            siteFE += wl.capacityTB;
+            const label = COHESITY_DATA.workloadPresets[type].name.split(" (")[0];
+            
+            const preset = COHESITY_DATA.workloadPresets[type];
+            const dailyRate = preset ? preset.dailyChangeRate : 3;
+            const rawChange = wl.capacityTB * (dailyRate / 100);
+            const dedupeChange = rawChange / wl.dedupe;
+            const windowHours = wl.windowHours || 8;
+            const wlDedupeMbps = (dedupeChange * 8000000) / (windowHours * 3600);
+            siteIngestDedupeMbps += wlDedupeMbps;
+
+            activeWls.push(`• <strong>${label}</strong>: ${wl.capacityTB} TB (Growth: ${wl.growth}%, Window: ${wl.windowHours}h)`);
+          }
+        });
+
+        content += `Total Sized: <strong>${siteFE} TB</strong><br>`;
+        const siteDedupeMbps = Math.ceil(siteIngestDedupeMbps);
+        const siteDedupeMBs = (siteDedupeMbps / 8).toFixed(1).replace(/\.0$/, "");
+        content += `Ingest WAN Rate: <strong>${siteDedupeMbps} Mbps (${siteDedupeMBs} MB/s)</strong><br>`;
+        
+        if (activeWls.length > 0) {
+          content += `<br>Active Workloads:<br>${activeWls.join("<br>")}`;
+        } else {
+          content += `<br><em>No active workloads configured at this site.</em>`;
+        }
+
+        this.dom.hotspotOverlay.innerHTML = `
+          <div class="hotspot-overlay-card">
+            <h4 style="margin:0 0 8px 0; color:var(--accent-blue); display:flex; align-items:center; justify-content:space-between;">
+              <span>🏢 Site Infrastructure</span>
+              <span class="material-symbols-outlined" style="cursor:pointer; font-size:16px; color:var(--text-muted);" onclick="document.getElementById('hotspot-overlay').style.display='none'">close</span>
+            </h4>
+            <p style="font-size:11.5px; line-height:1.4; color:var(--text-secondary); margin:0;">${content}</p>
+          </div>
+        `;
+        this.dom.hotspotOverlay.style.display = "block";
+        return;
+      }
+    }
+
     const details = {
       "wl-vm": {
         title: "VMware / Hyper-V Workloads",
@@ -1621,19 +1840,21 @@ Security checks log:
 
     // Renders structural data inside the print section
     let workloadsHTML = "";
-    Object.keys(this.state.workloads).forEach(type => {
-      const wl = this.state.workloads[type];
-      if (wl.active) {
-        workloadsHTML += `
-          <tr>
-            <td>${COHESITY_DATA.workloadPresets[type].name}</td>
-            <td>${wl.capacityTB} TB</td>
-            <td>${wl.growth}%</td>
-            <td>${wl.dedupe}:1</td>
-            <td>${wl.retentionDays} Days</td>
-          </tr>
-        `;
-      }
+    this.state.sites.forEach(site => {
+      Object.keys(site.workloads).forEach(type => {
+        const wl = site.workloads[type];
+        if (wl.active) {
+          workloadsHTML += `
+            <tr>
+              <td><strong>${site.name}</strong> - ${COHESITY_DATA.workloadPresets[type].name}</td>
+              <td>${wl.capacityTB} TB</td>
+              <td>${wl.growth}%</td>
+              <td>${wl.dedupe}:1</td>
+              <td>${wl.retentionDays} Days</td>
+            </tr>
+          `;
+        }
+      });
     });
 
     let checklistHTML = "";
@@ -1728,7 +1949,7 @@ Security checks log:
 
         <div class="print-section">
           <h2>1. Executive Summary</h2>
-          <p>This technical architecture proposal outlines the deployment parameters of a Cohesity DataCloud resilient storage cluster. Sized to meet a front-end workload footprint of <strong>${sizing.frontEndTB} TB</strong>, the system consolidates backup datasets into an integrated, secure scale-out pool reducing storage overhead through deduplication and compression.</p>
+          <p>This technical architecture proposal outlines the deployment parameters of a Cohesity DataCloud resilient storage cluster. The design consolidates protection across <strong>${this.state.sites.length} site(s)</strong> (${this.state.sites.map(s => s.name).join(", ")}). Sized to meet a front-end workload footprint of <strong>${sizing.frontEndTB} TB</strong>, the system consolidates backup datasets into an integrated, secure scale-out pool reducing storage overhead through deduplication and compression.</p>
           
           <div class="print-bom-summary">
             <div class="print-bom-col">
