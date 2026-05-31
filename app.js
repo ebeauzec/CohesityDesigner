@@ -12,11 +12,11 @@ class CohesityArchitectWizard {
         compliance: ["gdpr", "nis2"]
       },
       workloads: {
-        vm: { active: true, capacityTB: 50, growth: 10, dedupe: 2.5, retentionDays: 30 },
-        database: { active: true, capacityTB: 20, growth: 15, dedupe: 3.0, retentionDays: 14 },
-        files: { active: false, capacityTB: 100, growth: 20, dedupe: 1.4, retentionDays: 90 },
-        saas: { active: false, capacityTB: 10, growth: 12, dedupe: 2.0, retentionDays: 365 },
-        k8s: { active: false, capacityTB: 5, growth: 15, dedupe: 2.0, retentionDays: 30 }
+        vm: { active: true, capacityTB: 50, growth: 10, dedupe: 2.5, retentionDays: 30, windowHours: 8 },
+        database: { active: true, capacityTB: 20, growth: 15, dedupe: 3.0, retentionDays: 14, windowHours: 8 },
+        files: { active: false, capacityTB: 100, growth: 20, dedupe: 1.4, retentionDays: 90, windowHours: 8 },
+        saas: { active: false, capacityTB: 10, growth: 12, dedupe: 2.0, retentionDays: 365, windowHours: 8 },
+        k8s: { active: false, capacityTB: 5, growth: 15, dedupe: 2.0, retentionDays: 30, windowHours: 8 }
       },
       bcdr: {
         rpo: "1hr",
@@ -202,6 +202,16 @@ class CohesityArchitectWizard {
         this.state.workloads[type].growth = parseInt(e.target.value);
         this.updateSidebarStats();
       });
+
+      const windowRange = document.getElementById(`wl-window-${type}`);
+      if (windowRange) {
+        windowRange.addEventListener("input", (e) => {
+          document.getElementById(`wl-window-val-${type}`).textContent = `${e.target.value} hrs`;
+          this.state.workloads[type].windowHours = parseInt(e.target.value);
+          this.updateSidebarStats();
+          this.renderTopologyDiagram();
+        });
+      }
     });
 
     // Step 3: BCDR Configs
@@ -354,6 +364,12 @@ class CohesityArchitectWizard {
       num.value = data.capacityTB;
       growthRange.value = data.growth;
       document.getElementById(`wl-growth-val-${type}`).textContent = `${data.growth}%`;
+
+      const windowRange = document.getElementById(`wl-window-${type}`);
+      if (windowRange) {
+        windowRange.value = data.windowHours;
+        document.getElementById(`wl-window-val-${type}`).textContent = `${data.windowHours} hrs`;
+      }
     });
   }
 
@@ -508,6 +524,8 @@ class CohesityArchitectWizard {
   calculateBandwidth() {
     let dailyChangeRawTB = 0;
     let dailyChangeDedupeTB = 0;
+    let totalIngestRawMbps = 0;
+    let totalIngestDedupeMbps = 0;
 
     Object.keys(this.state.workloads).forEach(type => {
       const wl = this.state.workloads[type];
@@ -515,15 +533,27 @@ class CohesityArchitectWizard {
         const preset = COHESITY_DATA.workloadPresets[type];
         const changeRate = preset ? preset.dailyChangeRate : 3; // %
         const rawChange = wl.capacityTB * (changeRate / 100);
+        const dedupeChange = rawChange / wl.dedupe;
         
         dailyChangeRawTB += rawChange;
-        dailyChangeDedupeTB += (rawChange / wl.dedupe);
+        dailyChangeDedupeTB += dedupeChange;
+
+        const windowHours = wl.windowHours || 8;
+        const wlRawMbps = (rawChange * 8000000) / (windowHours * 3600);
+        const wlDedupeMbps = (dedupeChange * 8000000) / (windowHours * 3600);
+
+        totalIngestRawMbps += wlRawMbps;
+        totalIngestDedupeMbps += wlDedupeMbps;
       }
     });
 
-    const ingestHours = 8;
-    const ingestRawMbps = (dailyChangeRawTB * 8000000) / (ingestHours * 3600);
-    const ingestDedupeMbps = (dailyChangeDedupeTB * 8000000) / (ingestHours * 3600);
+    let ingestHours = 8;
+    if (totalIngestDedupeMbps > 0) {
+      ingestHours = (dailyChangeDedupeTB * 8000000) / (totalIngestDedupeMbps * 3600);
+    }
+
+    const ingestRawMbps = totalIngestRawMbps;
+    const ingestDedupeMbps = totalIngestDedupeMbps;
 
     const replHours = 4;
     const replMbps = (dailyChangeDedupeTB * 8000000) / (replHours * 3600);
@@ -559,7 +589,13 @@ class CohesityArchitectWizard {
 
     if (dailyChangeEl) dailyChangeEl.textContent = `${bw.dailyChangeRawTB} TB/day`;
     if (ingestEl) ingestEl.textContent = `${bw.ingestDedupeMbps} Mbps`;
-    if (ingestRawEl) ingestRawEl.textContent = `${bw.ingestRawMbps} Mbps`;
+    
+    const bwSidebarHint = document.getElementById("bw-sidebar-hint");
+    if (bwSidebarHint) {
+      bwSidebarHint.innerHTML = `Sized for a ${bw.ingestHours.toFixed(1)}h backup window (Raw ingest requires <span id="bw-local-raw" style="font-weight:700">${bw.ingestRawMbps} Mbps</span>). Source-side deduplication reduces local WAN transfer bandwidth.`;
+    } else {
+      if (ingestRawEl) ingestRawEl.textContent = `${bw.ingestRawMbps} Mbps`;
+    }
 
     // Secondary replication
     if (replContainer && replVal) {
@@ -601,6 +637,11 @@ class CohesityArchitectWizard {
     if (step3Dedupe) step3Dedupe.textContent = `${bw.dailyChangeDedupeTB} TB/day`;
     if (step3Ingest) step3Ingest.textContent = `${bw.ingestDedupeMbps} Mbps`;
     if (step3IngestRaw) step3IngestRaw.textContent = `${bw.ingestRawMbps} Mbps`;
+
+    const step3IngestTitle = document.getElementById("step3-ingest-title");
+    if (step3IngestTitle) {
+      step3IngestTitle.textContent = `Ingest Bandwidth (${bw.ingestHours.toFixed(1)}h)`;
+    }
 
     if (step3ReplContainer && step3ReplVal) {
       if (this.state.bcdr.replication === "second-site" || this.state.bcdr.replication === "cloud-edition") {
@@ -901,7 +942,7 @@ class CohesityArchitectWizard {
     const bandwidths = this.calculateBandwidth();
     summaryText += `<br><br><strong>Network & Bandwidth Estimates:</strong><br>`;
     summaryText += `• Raw daily backup change volume: <strong>${bandwidths.dailyChangeRawTB} TB/day</strong> (Deduplicated transfer footprint: <strong>${bandwidths.dailyChangeDedupeTB} TB/day</strong>).<br>`;
-    summaryText += `• Ingest network link consumption (8-hour backup window): <strong>${bandwidths.ingestDedupeMbps} Mbps</strong> (requires ~<strong>${bandwidths.ingestRawMbps} Mbps</strong> without source-side deduplication).<br>`;
+    summaryText += `• Ingest network link consumption (${bandwidths.ingestHours.toFixed(1)}-hour average backup window): <strong>${bandwidths.ingestDedupeMbps} Mbps</strong> (requires ~<strong>${bandwidths.ingestRawMbps} Mbps</strong> without source-side deduplication).<br>`;
     
     if (this.state.security.fortknox) {
       summaryText += `• Cloud vaulting bandwidth (FortKnox 4-hour sync window): <strong>${bandwidths.vaultMbps} Mbps</strong>.<br>`;
@@ -1163,7 +1204,7 @@ Recommended primary cluster configuration: ${sizing.nodeRecommendation}.
     text += `\nNetwork & Bandwidth Sizing:\n`;
     text += `- Daily Backup Change Rate (Raw): ${bandwidths.dailyChangeRawTB} TB/day\n`;
     text += `- Daily Backup Change Rate (Deduplicated): ${bandwidths.dailyChangeDedupeTB} TB/day\n`;
-    text += `- Recommended Ingest Connection (8h backup window): ${bandwidths.ingestDedupeMbps} Mbps (requires ~${bandwidths.ingestRawMbps} Mbps raw link)\n`;
+    text += `- Recommended Ingest Connection (${bandwidths.ingestHours.toFixed(1)}h average backup window): ${bandwidths.ingestDedupeMbps} Mbps (requires ~${bandwidths.ingestRawMbps} Mbps raw link)\n`;
     
     if (this.state.security.fortknox) {
       text += `- FortKnox SaaS Vault Replication (4h SLA): ${bandwidths.vaultMbps} Mbps\n`;
@@ -1337,7 +1378,7 @@ Security checks log:
       const dailyRate = wlPreset ? wlPreset.dailyChangeRate : 3;
       const rawChange = wl.capacityTB * (dailyRate / 100);
       const dedupeChange = rawChange / wl.dedupe;
-      const wlIngestMbps = Math.ceil((dedupeChange * 8000000) / (8 * 3600));
+      const wlIngestMbps = Math.ceil((dedupeChange * 8000000) / ((wl.windowHours || 8) * 3600));
  
       svgContent += `
         <!-- Workload Link to Cluster -->
@@ -1499,27 +1540,32 @@ Security checks log:
         content: `Sized Capacity: <strong>${this.state.workloads.vm.capacityTB} TB</strong><br>
                   Expected Compound Growth: <strong>${this.state.workloads.vm.growth}% / year</strong><br>
                   Target Deduplication Rate: <strong>${this.state.workloads.vm.dedupe}:1</strong><br>
+                  Backup Window SLA: <strong>${this.state.workloads.vm.windowHours || 8} hrs</strong><br>
                   Recommended Policy: Cohesity DataProtect dynamic VM policies, leveraging vSphere Storage APIs (VADP) with CBT tracking for near-zero backup windows.`
       },
       "wl-database": {
         title: "Database Tier Sizing",
         content: `Sized Capacity: <strong>${this.state.workloads.database.capacityTB} TB</strong><br>
                   Dedupe Factor: <strong>${this.state.workloads.database.dedupe}:1</strong><br>
+                  Backup Window SLA: <strong>${this.state.workloads.database.windowHours || 8} hrs</strong><br>
                   Database change rate is set to 5% daily. To facilitate instant recovery, Cohesity maps backups directly to its custom POSIX-compliant file system (SpanFS), mounting the SQL/Oracle datastore directly on the backup node for instantaneous spin-up.`
       },
       "wl-files": {
         title: "Unstructured File Data (SmartFiles)",
         content: `Capacity: <strong>${this.state.workloads.files.capacityTB} TB</strong><br>
+                  Backup Window SLA: <strong>${this.state.workloads.files.windowHours || 8} hrs</strong><br>
                   SmartFiles leverages global deduplication to tier cold objects. By integrating direct file protocol hooks (NFS/SMB), Cohesity acts as a scale-out NAS, offering rapid retrieval without consuming expensive primary SSD storage.`
       },
       "wl-saas": {
         title: "SaaS App Protection",
         content: `Capacity: <strong>${this.state.workloads.saas.capacityTB} TB</strong><br>
+                  Backup Window SLA: <strong>${this.state.workloads.saas.windowHours || 8} hrs</strong><br>
                   Fully manages backup tasks for Microsoft 365 (Exchange, OneDrive, SharePoint, Teams) and Salesforce data. Runs completely agentless inside the Cohesity Cloud Services SaaS control plane.`
       },
       "wl-k8s": {
         title: "Kubernetes Workloads",
         content: `Capacity: <strong>${this.state.workloads.k8s.capacityTB} TB</strong><br>
+                  Backup Window SLA: <strong>${this.state.workloads.k8s.windowHours || 8} hrs</strong><br>
                   Integrates with CSI drivers to snapshot and store stateful Kubernetes volumes along with full application manifests (Helm, namespaces, deployment configurations) to accelerate microservice failover.`
       },
       "cluster": {
