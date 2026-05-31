@@ -66,6 +66,10 @@
             <div class="step-circle">5</div>
             <span class="step-label">Deploy</span>
           </div>
+          <div class="step-node" data-step="6">
+            <div class="step-circle">6</div>
+            <span class="step-label">Proposal</span>
+          </div>
         </div>
 
         <!-- WIZARD STEP 1: Project details -->
@@ -530,6 +534,59 @@
                 <input type="radio" name="node-perf" value="hybrid" style="accent-color:var(--accent-green);">
                 <span>Capacity Standard Hybrid (C5000 Class)</span>
               </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- WIZARD STEP 6: Interactive Proposal & BOM -->
+        <div class="wizard-step" id="step-6">
+          <h2 class="step-title">Executive Architecture Proposal</h2>
+          <p class="step-subtitle">Review sized hardware configurations, licensing details, estimated pricing, and the deployment roadmap.</p>
+          
+          <div style="display:flex; flex-direction:column; gap:20px;">
+            <!-- Executive Summary Card -->
+            <div class="glass-card" style="background:rgba(255,255,255,0.02); padding:20px; border-radius:12px; border:1px solid var(--border-color);">
+              <h3 style="font-size:15px; color:var(--accent-green); margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+                <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">description</span>
+                Executive Summary
+              </h3>
+              <p id="proposal-exec-summary" style="font-size:12.5px; color:var(--text-secondary); line-height:1.6;">
+                <!-- Generated dynamically -->
+              </p>
+            </div>
+
+            <!-- Bill of Materials (BOM) Table -->
+            <div>
+              <h3 style="font-size:15px; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                <span class="material-symbols-outlined" style="color:var(--accent-blue); font-size:20px; vertical-align:middle;">list_alt</span>
+                Bill of Materials (BOM) & Sizing Details
+              </h3>
+              <div style="overflow-x:auto; border:1px solid var(--border-color); border-radius:8px; background:var(--bg-input);">
+                <table style="width:100%; border-collapse:collapse; font-size:12.5px; text-align:left;" id="proposal-bom-table">
+                  <!-- Generated dynamically -->
+                </table>
+              </div>
+            </div>
+
+            <!-- Implementation Roadmap -->
+            <div class="glass-card" style="background:rgba(255,255,255,0.02); padding:20px; border-radius:12px; border:1px solid var(--border-color);">
+              <h3 style="font-size:15px; color:var(--accent-purple); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">map</span>
+                Architectural Deployment Roadmap
+              </h3>
+              <div id="proposal-roadmap-timeline" style="display:flex; flex-direction:column; gap:16px;">
+                <!-- Generated dynamically -->
+              </div>
+            </div>
+            
+            <!-- Actions -->
+            <div style="display:flex; gap:16px; margin-top:10px;">
+              <button id="btn-copy-proposal" class="btn btn-secondary" style="flex:1; justify-content:center; padding:12px;">
+                <span class="material-symbols-outlined" style="font-size:18px;">content_copy</span> Copy Proposal Text
+              </button>
+              <button id="btn-export-pdf" class="btn btn-primary" style="flex:1; justify-content:center; padding:12px;">
+                <span class="material-symbols-outlined" style="font-size:18px;">picture_as_pdf</span> Download Proposal PDF
+              </button>
             </div>
           </div>
         </div>

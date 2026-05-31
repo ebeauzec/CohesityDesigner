@@ -82,13 +82,30 @@ class CohesityArchitectWizard {
     // SVG Canvas
     this.dom.svgContainer = document.getElementById("topology-svg-container");
     this.dom.hotspotOverlay = document.getElementById("hotspot-overlay");
+
+    // Proposal Step Elements
+    this.dom.btnCopyProposal = document.getElementById("btn-copy-proposal");
+    this.dom.btnExportPdf = document.getElementById("btn-export-pdf");
+    this.dom.proposalSummary = document.getElementById("proposal-exec-summary");
+    this.dom.proposalBOMTable = document.getElementById("proposal-bom-table");
+    this.dom.proposalRoadmap = document.getElementById("proposal-roadmap-timeline");
   }
 
   bindEvents() {
     // Wizard Navigation
     this.dom.btnPrev.addEventListener("click", () => this.navigateStep(-1));
-    this.dom.btnNext.addEventListener("click", () => this.navigateStep(1));
+    this.dom.btnNext.addEventListener("click", () => {
+      if (this.state.currentStep === 6) {
+        this.goToStep(1); // Restart
+      } else {
+        this.navigateStep(1);
+      }
+    });
     this.dom.btnPrint.addEventListener("click", () => this.generateReportAndPrint());
+
+    // Proposal step event bindings
+    this.dom.btnCopyProposal.addEventListener("click", () => this.copyProposalToClipboard());
+    this.dom.btnExportPdf.addEventListener("click", () => this.generateReportAndPrint());
 
     // Step Nav Clicks
     this.dom.stepNodes.forEach((node, idx) => {
@@ -348,7 +365,7 @@ class CohesityArchitectWizard {
 
   navigateStep(direction) {
     const nextStep = this.state.currentStep + direction;
-    if (nextStep >= 1 && nextStep <= 5) {
+    if (nextStep >= 1 && nextStep <= 6) {
       this.goToStep(nextStep);
     }
   }
@@ -376,15 +393,17 @@ class CohesityArchitectWizard {
       }
     });
 
-    const percent = ((stepNumber - 1) / 4) * 100;
+    const percent = ((stepNumber - 1) / 5) * 100;
     this.dom.progressFill.style.width = `${percent}%`;
 
     // Manage Buttons State
     this.dom.btnPrev.disabled = (stepNumber === 1);
-    if (stepNumber === 5) {
-      this.dom.btnNext.innerHTML = `Complete Proposal <i class="material-icons-round" style="font-size:16px">assignment_turned_in</i>`;
+    if (stepNumber === 6) {
+      this.dom.btnNext.innerHTML = `Restart Wizard <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">refresh</span>`;
+    } else if (stepNumber === 5) {
+      this.dom.btnNext.innerHTML = `Generate Proposal <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">assignment_turned_in</span>`;
     } else {
-      this.dom.btnNext.innerHTML = `Next Step <i class="material-icons-round" style="font-size:16px">arrow_forward</i>`;
+      this.dom.btnNext.innerHTML = `Next Step <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">arrow_forward</span>`;
     }
 
     this.updateUI();
@@ -659,6 +678,326 @@ class CohesityArchitectWizard {
     // Initialise code panel default to active tab
     const activeTab = document.querySelector(".tab-btn.active").getAttribute("data-tab");
     this.updateIntegrationCode(activeTab);
+
+    // If on proposal step, regenerate proposal & BOM details
+    if (this.state.currentStep === 6) {
+      this.updateProposalAndBOM();
+    }
+  }
+
+  updateProposalAndBOM() {
+    const sizing = this.calculateSizing();
+    const compliance = this.calculateComplianceScore();
+
+    // 1. Generate Executive Summary text
+    const activeWls = Object.keys(this.state.workloads)
+      .filter(w => this.state.workloads[w].active)
+      .map(w => COHESITY_DATA.workloadPresets[w].name.split(" (")[0]);
+      
+    const complianceNames = this.state.project.compliance
+      .map(c => COHESITY_DATA.complianceFrameworks[c] ? COHESITY_DATA.complianceFrameworks[c].name.split(" ")[0] : c.toUpperCase());
+      
+    let summaryText = `This technical architecture proposal outlines the deployment parameters of a Cohesity DataCloud resilient storage cluster sized for <strong>${this.state.project.name}</strong> (Industry: <strong>${this.state.project.industry}</strong>). <br><br>`;
+    summaryText += `To protect your front-end workload footprint of <strong>${sizing.frontEndTB} TB</strong> (consisting of ${activeWls.join(", ")}), the system establishes an integrated hyperconverged scale-out storage mesh. Compounded over a 3-year growth forecast and adjusted for GFS snapshot retention targets, the calculated usable storage requirement stands at <strong>${sizing.usableLocalTB} TB</strong>.<br><br>`;
+    
+    if (this.state.deployment.model === "saas") {
+      summaryText += `Based on the selected <strong>SaaS-First Deployment Scenario</strong>, workloads will backup directly to Cohesity Cloud Services SaaS storage pools, removing the need for local hardware node management. `;
+    } else {
+      summaryText += `To support this requirement locally, Cohesity recommends deploying a <strong>${sizing.nodeRecommendation}</strong>. `;
+    }
+    
+    if (this.state.security.fortknox) {
+      summaryText += `To guarantee survivability against active ransomware threats, Cohesity FortKnox cyber vaulting is incorporated, isolating an immutable copy of <strong>${sizing.fortKnoxVaultTB} TB</strong> in a virtually air-gapped SaaS cloud vault. `;
+    }
+    
+    if (this.state.security.datahawk) {
+      summaryText += `DataHawk is active to perform machine learning anomaly scanning, Yara threat intelligence signature checks, and automated sensitive data classification. `;
+    }
+    
+    if (complianceNames.length > 0) {
+      summaryText += `<br><br>This architecture incorporates structural configurations designed to assist with your regulatory compliance targets for <strong>${complianceNames.join(", ")}</strong>.`;
+    }
+    
+    this.dom.proposalSummary.innerHTML = summaryText;
+
+    // 2. Generate BOM Table
+    let tableHTML = `
+      <thead>
+        <tr style="border-bottom: 2px solid var(--border-color); background: rgba(255,255,255,0.02);">
+          <th style="padding: 12px; font-weight: 600;">Product / Subscription</th>
+          <th style="padding: 12px; font-weight: 600; text-align: center;">Qty</th>
+          <th style="padding: 12px; font-weight: 600;">Sizing / Configuration Details</th>
+          <th style="padding: 12px; font-weight: 600; text-align: right;">Est. Annual Subscription</th>
+        </tr>
+      </thead>
+      <tbody>
+    `;
+    
+    let totalAnnualPrice = 0;
+    
+    // Line 1: Primary DataProtect Node or SaaS Capacity
+    if (this.state.deployment.model === "saas") {
+      const pricePerTB = 200; // Annual cost per SaaS TB
+      const linePrice = parseFloat(sizing.frontEndTB) * pricePerTB;
+      totalAnnualPrice += linePrice;
+      tableHTML += `
+        <tr style="border-bottom: 1px solid var(--border-color);">
+          <td style="padding: 12px; font-weight: 600;">Cohesity DataProtect SaaS License</td>
+          <td style="padding: 12px; text-align: center;">${sizing.frontEndTB} TB</td>
+          <td style="padding: 12px; color: var(--text-secondary);">Fully-managed cloud-to-cloud backup subscription ($200 / TB)</td>
+          <td style="padding: 12px; text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--accent-green);">$${linePrice.toLocaleString()}</td>
+        </tr>
+      `;
+    } else {
+      // Hardware Nodes
+      const pricePerNode = 14500; // Annual subscription cost per node (includes support)
+      const nodeLinePrice = sizing.localNodeCount * pricePerNode;
+      
+      // DataProtect capacity subscription
+      const pricePerTB = 120; // Annual cost per front-end TB
+      const dataProtectPrice = parseFloat(sizing.frontEndTB) * pricePerTB;
+      totalAnnualPrice += (nodeLinePrice + dataProtectPrice);
+      
+      tableHTML += `
+        <tr style="border-bottom: 1px solid var(--border-color);">
+          <td style="padding: 12px; font-weight: 600;">Cohesity ${sizing.nodeModelName} Nodes</td>
+          <td style="padding: 12px; text-align: center;">${sizing.localNodeCount} Nodes</td>
+          <td style="padding: 12px; color: var(--text-secondary);">Physical hyperconverged storage nodes (C5000/C6200 hardware subscription)</td>
+          <td style="padding: 12px; text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--accent-green);">$${nodeLinePrice.toLocaleString()}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid var(--border-color);">
+          <td style="padding: 12px; font-weight: 600;">Cohesity DataProtect Software Suite</td>
+          <td style="padding: 12px; text-align: center;">${sizing.frontEndTB} TB</td>
+          <td style="padding: 12px; color: var(--text-secondary);">Backup & Instant Recovery software capacity subscription ($120 / Front-End TB)</td>
+          <td style="padding: 12px; text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--accent-green);">$${dataProtectPrice.toLocaleString()}</td>
+        </tr>
+      `;
+    }
+
+    // Line 2: Cloud Edition Nodes if Cloud Replication Target is active
+    if (this.state.bcdr.replication === "cloud-edition") {
+      const cloudNodePrice = 9800; // Cloud Virtual Node sub price
+      const cloudLinePrice = sizing.cloudNodeCount * cloudNodePrice;
+      totalAnnualPrice += cloudLinePrice;
+      tableHTML += `
+        <tr style="border-bottom: 1px solid var(--border-color);">
+          <td style="padding: 12px; font-weight: 600;">Cohesity Cloud Edition IaaS Virtual Nodes</td>
+          <td style="padding: 12px; text-align: center;">${sizing.cloudNodeCount} Nodes</td>
+          <td style="padding: 12px; color: var(--text-secondary);">Replication target running in AWS/Azure Virtual private clouds ($9,800 / Node)</td>
+          <td style="padding: 12px; text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--accent-green);">$${cloudLinePrice.toLocaleString()}</td>
+        </tr>
+      `;
+    }
+
+    // Line 3: FortKnox Cyber Vault
+    if (this.state.security.fortknox) {
+      const pricePerVaultedTB = 240; // Annual cost per vaulted TB (includes cloud storage & egress)
+      const fkLinePrice = sizing.fortKnoxVaultTB * pricePerVaultedTB;
+      totalAnnualPrice += fkLinePrice;
+      tableHTML += `
+        <tr style="border-bottom: 1px solid var(--border-color);">
+          <td style="padding: 12px; font-weight: 600;">Cohesity FortKnox Cloud Cyber Vault</td>
+          <td style="padding: 12px; text-align: center;">${sizing.fortKnoxVaultTB} TB</td>
+          <td style="padding: 12px; color: var(--text-secondary);">Isolated cloud vaulting with virtual air-gap and multi-party quorum control</td>
+          <td style="padding: 12px; text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--accent-green);">$${fkLinePrice.toLocaleString()}</td>
+        </tr>
+      `;
+    }
+
+    // Line 4: DataHawk Security
+    if (this.state.security.datahawk) {
+      const datahawkPricePerTB = 90; // Annual cost per TB
+      const dhLinePrice = parseFloat(sizing.frontEndTB) * datahawkPricePerTB;
+      totalAnnualPrice += dhLinePrice;
+      tableHTML += `
+        <tr style="border-bottom: 1px solid var(--border-color);">
+          <td style="padding: 12px; font-weight: 600;">Cohesity DataHawk Threat Scan / Classify</td>
+          <td style="padding: 12px; text-align: center;">${sizing.frontEndTB} TB</td>
+          <td style="padding: 12px; color: var(--text-secondary);">AI threat analysis, Yara-rule malware engine, and sensitive data discovery scanner</td>
+          <td style="padding: 12px; text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--accent-green);">$${dhLinePrice.toLocaleString()}</td>
+        </tr>
+      `;
+    }
+
+    // Line 5: SiteContinuity Disaster Recovery
+    if (this.state.bcdr.siteContinuity && this.state.bcdr.replication !== "none") {
+      const siteContPrice = 2400; // Flat base annual orchestrator sub
+      totalAnnualPrice += siteContPrice;
+      tableHTML += `
+        <tr style="border-bottom: 1px solid var(--border-color);">
+          <td style="padding: 12px; font-weight: 600;">Cohesity SiteContinuity DR Orchestrator</td>
+          <td style="padding: 12px; text-align: center;">Active</td>
+          <td style="padding: 12px; color: var(--text-secondary);">Disaster recovery playbook sequencing, network mapping, and failover/failback scripting</td>
+          <td style="padding: 12px; text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--accent-green);">$${siteContPrice.toLocaleString()}</td>
+        </tr>
+      `;
+    }
+
+    // Total Summary Row
+    tableHTML += `
+      <tr style="background: rgba(0, 214, 143, 0.05); border-top: 2px solid var(--accent-green);">
+        <td style="padding: 16px; font-weight: 700; font-size: 14px;" colspan="3">Estimated Total Cohesity Subscription (Annual Rate)</td>
+        <td style="padding: 16px; text-align: right; font-family: var(--font-mono); font-weight: 800; font-size: 16px; color: var(--accent-green);">$${totalAnnualPrice.toLocaleString()}</td>
+      </tr>
+      </tbody>
+    `;
+    
+    this.dom.proposalBOMTable.innerHTML = tableHTML;
+
+    // 3. Generate Roadmap Timeline HTML
+    let roadmapHTML = "";
+    
+    const roadmapPhases = [
+      {
+        phase: "Phase 1: Network & Topology Prep",
+        desc: "Configure core network configurations. Establish dedicated VLAN interface mappings. Set up firewall rules allowing outbound HTTPS (port 443) telemetry links to Cohesity Helios SaaS portal and isolated SaaS vault endpoints (Cohesity FortKnox)."
+      },
+      {
+        phase: "Phase 2: Cluster Setup & Control Plane Integration",
+        desc: "Assemble physical rack nodes (or initialize virtual nodes), install Cohesity DataCloud operating environment, and bind nodes into a resilient scale-out cluster. Register cluster to Helios control plane, and immediately enable Multi-Factor Authentication (MFA) and Multi-Party Authorization (MPA) quorum settings."
+      },
+      {
+        phase: "Phase 3: Workload Connection & SLA Enrollment",
+        desc: "Register workload hypervisors (VMware vCenter) and enterprise database instances agentlessly. Configure SLA policy templates setting RPO backup frequencies and retention rules. Schedule backup ingestion tasks to run variable-length global deduplication."
+      },
+      {
+        phase: "Phase 4: Resiliency Testing & Hardening Drills",
+        desc: "Enable FortKnox cloud cyber vault replication tasks. Setup DataHawk automated Yara scanning schedules to inspect backups for ransomware indicators. Configure SiteContinuity runbooks matching application startup tiers, and perform non-disruptive disaster recovery sandbox tests."
+      }
+    ];
+
+    roadmapPhases.forEach((p, idx) => {
+      roadmapHTML += `
+        <div style="display:flex; gap:12px; align-items:flex-start;">
+          <div style="width:24px; height:24px; border-radius:50%; background:rgba(164, 83, 248, 0.15); border: 1.5px solid var(--accent-purple); color:var(--accent-purple); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0;">${idx+1}</div>
+          <div>
+            <strong style="font-size:13px; color:white; display:block; margin-bottom:3px;">${p.phase}</strong>
+            <p style="font-size:11.5px; color:var(--text-secondary); line-height:1.4;">${p.desc}</p>
+          </div>
+        </div>
+      `;
+    });
+
+    this.dom.proposalRoadmap.innerHTML = roadmapHTML;
+  }
+
+  copyProposalToClipboard() {
+    const sizing = this.calculateSizing();
+    const compliance = this.calculateComplianceScore();
+    
+    const activeWls = Object.keys(this.state.workloads)
+      .filter(w => this.state.workloads[w].active)
+      .map(w => COHESITY_DATA.workloadPresets[w].name.split(" (")[0]);
+      
+    const complianceNames = this.state.project.compliance
+      .map(c => COHESITY_DATA.complianceFrameworks[c] ? COHESITY_DATA.complianceFrameworks[c].name : c.toUpperCase());
+
+    let text = `=========================================
+COHESITY SOLUTION ARCHITECTURE PROPOSAL
+=========================================
+Project: ${this.state.project.name}
+Sector: ${this.state.project.industry}
+Date: 2026-05-31
+
+1. EXECUTIVE SUMMARY
+---------------------
+This technical architecture proposal outlines the deployment parameters of a Cohesity DataCloud resilient storage cluster. Sized to meet a front-end workload footprint of ${sizing.frontEndTB} TB (consisting of: ${activeWls.join(", ")}), the system establishes an integrated hyperconverged scale-out storage mesh. Compounded over a 3-year growth forecast and adjusted for GFS snapshot retention targets, the calculated usable storage requirement stands at ${sizing.usableLocalTB} TB.
+
+Deployment model: ${this.state.deployment.model.toUpperCase()} Cloud Scenario.
+Recommended primary cluster configuration: ${sizing.nodeRecommendation}.
+`;
+
+    if (this.state.security.fortknox) {
+      text += `Cohesity FortKnox cloud cyber vaulting is incorporated, isolating an immutable copy of ${sizing.fortKnoxVaultTB} TB in a virtually air-gapped SaaS cloud vault.\n`;
+    }
+    if (this.state.security.datahawk) {
+      text += `DataHawk is active to perform machine learning anomaly scanning, Yara threat intelligence signature checks, and automated sensitive data classification.\n`;
+    }
+    if (complianceNames.length > 0) {
+      text += `\nRegulatory Compliance Alignment Targets: ${complianceNames.join(", ")}.\n`;
+    }
+
+    text += `
+2. BILL OF MATERIALS (BOM) & PRICING
+-------------------------------------
+Estimated Annual Subscription Details:
+- Front-End Sized Data: ${sizing.frontEndTB} TB
+- Local Sized Usable Target: ${sizing.usableLocalTB} TB
+`;
+
+    let totalAnnualPrice = 0;
+    if (this.state.deployment.model === "saas") {
+      const linePrice = parseFloat(sizing.frontEndTB) * 200;
+      totalAnnualPrice += linePrice;
+      text += `- Cohesity DataProtect SaaS subscription: $${linePrice.toLocaleString()}/yr\n`;
+    } else {
+      const nodePrice = sizing.localNodeCount * 14500;
+      const protectPrice = parseFloat(sizing.frontEndTB) * 120;
+      totalAnnualPrice += (nodePrice + protectPrice);
+      text += `- Cohesity physical nodes (${sizing.nodeModelName}): $${nodePrice.toLocaleString()}/yr\n`;
+      text += `- Cohesity DataProtect capacity license: $${protectPrice.toLocaleString()}/yr\n`;
+    }
+
+    if (this.state.bcdr.replication === "cloud-edition") {
+      const cloudPrice = sizing.cloudNodeCount * 9800;
+      totalAnnualPrice += cloudPrice;
+      text += `- Cohesity Cloud Edition virtual nodes: $${cloudPrice.toLocaleString()}/yr\n`;
+    }
+    if (this.state.security.fortknox) {
+      const fkPrice = sizing.fortKnoxVaultTB * 240;
+      totalAnnualPrice += fkPrice;
+      text += `- Cohesity FortKnox Cyber Vault capacity: $${fkPrice.toLocaleString()}/yr\n`;
+    }
+    if (this.state.security.datahawk) {
+      const dhPrice = parseFloat(sizing.frontEndTB) * 90;
+      totalAnnualPrice += dhPrice;
+      text += `- Cohesity DataHawk ML scan & classification: $${dhPrice.toLocaleString()}/yr\n`;
+    }
+    if (this.state.bcdr.siteContinuity && this.state.bcdr.replication !== "none") {
+      const scPrice = 2400;
+      totalAnnualPrice += scPrice;
+      text += `- Cohesity SiteContinuity DR flat subscription: $${scPrice.toLocaleString()}/yr\n`;
+    }
+
+    text += `\nEstimated Total Cohesity Subscription (Annual Rate): $${totalAnnualPrice.toLocaleString()}/yr\n`;
+
+    text += `
+3. ARCHITECTURAL DEPLOYMENT ROADMAP
+------------------------------------
+Phase 1: Configure core network configurations, establish VLAN interface mappings, set firewall outbound rules (port 443) to Helios and FortKnox.
+Phase 2: Assemble hardware nodes, install Cohesity DataCloud, register cluster on Helios, and enable MFA and MPA quorum.
+Phase 3: Register hypervisors (VMware vCenter) and database instances. Apply SLA policies mapping workloads to RPO/RTO goals.
+Phase 4: Enable FortKnox vaulting tasks, activate DataHawk scanner routines, configure SiteContinuity runbooks, and perform non-disruptive DR tests.
+
+4. COMPLIANCE & CYBER DEFENSE HARDENING INDEX
+----------------------------------------------
+Overall Cyber Resilience Index: ${compliance.score}/100
+Rating Level: ${compliance.score >= 80 ? 'EXEMPLARY' : compliance.score >= 50 ? 'VULNERABLE' : 'CRITICAL RISK'}
+
+Security checks log:
+`;
+
+    const securityChecks = [
+      { label: "DataLock snapshot immutability enforced (WORM)", pass: true },
+      { label: "Helios Control Plane Multi-Factor Auth (MFA)", pass: this.state.security.mfa },
+      { label: "Helios Multi-Party Approval (MPA) Quorum active", pass: this.state.security.mpa },
+      { label: "Isolated off-site air-gapped recovery (FortKnox)", pass: this.state.security.fortknox },
+      { label: "Real-time AI malware anomaly scanning (DataHawk)", pass: this.state.security.datahawk },
+      { label: "Enterprise Key Management integration (KMS)", pass: this.state.security.kms === "customer" }
+    ];
+
+    securityChecks.forEach(check => {
+      text += `- ${check.label}: [${check.pass ? 'PASS' : 'FAIL'}]\n`;
+    });
+
+    navigator.clipboard.writeText(text);
+    
+    // Visual button feedback
+    const originalText = this.dom.btnCopyProposal.innerHTML;
+    this.dom.btnCopyProposal.innerHTML = `<span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle;">check</span> Proposal Copied!`;
+    setTimeout(() => {
+      this.dom.btnCopyProposal.innerHTML = originalText;
+    }, 2000);
   }
 
   renderTopologyDiagram() {
