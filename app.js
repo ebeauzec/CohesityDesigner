@@ -561,13 +561,19 @@ class CohesityArchitectWizard {
     const vaultHours = 4;
     const vaultMbps = (dailyChangeDedupeTB * 8000000) / (vaultHours * 3600);
 
+    const formatMBs = (mbps) => (mbps / 8).toFixed(1).replace(/\.0$/, "");
+
     return {
       dailyChangeRawTB: dailyChangeRawTB.toFixed(2),
       dailyChangeDedupeTB: dailyChangeDedupeTB.toFixed(2),
       ingestRawMbps: Math.ceil(ingestRawMbps),
+      ingestRawMBs: formatMBs(Math.ceil(ingestRawMbps)),
       ingestDedupeMbps: Math.ceil(ingestDedupeMbps),
+      ingestDedupeMBs: formatMBs(Math.ceil(ingestDedupeMbps)),
       replMbps: Math.ceil(replMbps),
+      replMBs: formatMBs(Math.ceil(replMbps)),
       vaultMbps: Math.ceil(vaultMbps),
+      vaultMBs: formatMBs(Math.ceil(vaultMbps)),
       ingestHours,
       replHours,
       vaultHours
@@ -588,20 +594,20 @@ class CohesityArchitectWizard {
     const vaultVal = document.getElementById("bw-vault-val");
 
     if (dailyChangeEl) dailyChangeEl.textContent = `${bw.dailyChangeRawTB} TB/day`;
-    if (ingestEl) ingestEl.textContent = `${bw.ingestDedupeMbps} Mbps`;
+    if (ingestEl) ingestEl.textContent = `${bw.ingestDedupeMbps} Mbps (${bw.ingestDedupeMBs} MB/s)`;
     
     const bwSidebarHint = document.getElementById("bw-sidebar-hint");
     if (bwSidebarHint) {
-      bwSidebarHint.innerHTML = `Sized for a ${bw.ingestHours.toFixed(1)}h backup window (Raw ingest requires <span id="bw-local-raw" style="font-weight:700">${bw.ingestRawMbps} Mbps</span>). Source-side deduplication reduces local WAN transfer bandwidth.`;
+      bwSidebarHint.innerHTML = `Sized for a ${bw.ingestHours.toFixed(1)}h backup window (Raw ingest requires <span id="bw-local-raw" style="font-weight:700">${bw.ingestRawMbps} Mbps (${bw.ingestRawMBs} MB/s)</span>). Source-side deduplication reduces local WAN transfer bandwidth.`;
     } else {
-      if (ingestRawEl) ingestRawEl.textContent = `${bw.ingestRawMbps} Mbps`;
+      if (ingestRawEl) ingestRawEl.textContent = `${bw.ingestRawMbps} Mbps (${bw.ingestRawMBs} MB/s)`;
     }
 
     // Secondary replication
     if (replContainer && replVal) {
       if (this.state.bcdr.replication === "second-site" || this.state.bcdr.replication === "cloud-edition") {
         replContainer.style.display = "flex";
-        replVal.textContent = `${bw.replMbps} Mbps`;
+        replVal.textContent = `${bw.replMbps} Mbps (${bw.replMBs} MB/s)`;
         if (replLabel) {
           replLabel.textContent = this.state.bcdr.replication === "cloud-edition" 
             ? "Cloud Replication (4h):" 
@@ -616,7 +622,7 @@ class CohesityArchitectWizard {
     if (vaultContainer && vaultVal) {
       if (this.state.security.fortknox) {
         vaultContainer.style.display = "flex";
-        vaultVal.textContent = `${bw.vaultMbps} Mbps`;
+        vaultVal.textContent = `${bw.vaultMbps} Mbps (${bw.vaultMBs} MB/s)`;
       } else {
         vaultContainer.style.display = "none";
       }
@@ -635,8 +641,8 @@ class CohesityArchitectWizard {
 
     if (step3Change) step3Change.textContent = `${bw.dailyChangeRawTB} TB/day`;
     if (step3Dedupe) step3Dedupe.textContent = `${bw.dailyChangeDedupeTB} TB/day`;
-    if (step3Ingest) step3Ingest.textContent = `${bw.ingestDedupeMbps} Mbps`;
-    if (step3IngestRaw) step3IngestRaw.textContent = `${bw.ingestRawMbps} Mbps`;
+    if (step3Ingest) step3Ingest.textContent = `${bw.ingestDedupeMbps} Mbps (${bw.ingestDedupeMBs} MB/s)`;
+    if (step3IngestRaw) step3IngestRaw.textContent = `${bw.ingestRawMbps} Mbps (${bw.ingestRawMBs} MB/s)`;
 
     const step3IngestTitle = document.getElementById("step3-ingest-title");
     if (step3IngestTitle) {
@@ -646,7 +652,7 @@ class CohesityArchitectWizard {
     if (step3ReplContainer && step3ReplVal) {
       if (this.state.bcdr.replication === "second-site" || this.state.bcdr.replication === "cloud-edition") {
         step3ReplContainer.style.display = "flex";
-        step3ReplVal.textContent = `${bw.replMbps} Mbps`;
+        step3ReplVal.textContent = `${bw.replMbps} Mbps (${bw.replMBs} MB/s)`;
         if (step3ReplLabel) {
           step3ReplLabel.textContent = this.state.bcdr.replication === "cloud-edition" 
             ? "Cloud replication WAN link (4h SLA):" 
@@ -660,7 +666,7 @@ class CohesityArchitectWizard {
     if (step3VaultContainer && step3VaultVal) {
       if (this.state.security.fortknox) {
         step3VaultContainer.style.display = "flex";
-        step3VaultVal.textContent = `${bw.vaultMbps} Mbps`;
+        step3VaultVal.textContent = `${bw.vaultMbps} Mbps (${bw.vaultMBs} MB/s)`;
       } else {
         step3VaultContainer.style.display = "none";
       }
@@ -942,13 +948,13 @@ class CohesityArchitectWizard {
     const bandwidths = this.calculateBandwidth();
     summaryText += `<br><br><strong>Network & Bandwidth Estimates:</strong><br>`;
     summaryText += `• Raw daily backup change volume: <strong>${bandwidths.dailyChangeRawTB} TB/day</strong> (Deduplicated transfer footprint: <strong>${bandwidths.dailyChangeDedupeTB} TB/day</strong>).<br>`;
-    summaryText += `• Ingest network link consumption (${bandwidths.ingestHours.toFixed(1)}-hour average backup window): <strong>${bandwidths.ingestDedupeMbps} Mbps</strong> (requires ~<strong>${bandwidths.ingestRawMbps} Mbps</strong> without source-side deduplication).<br>`;
+    summaryText += `• Ingest network link consumption (${bandwidths.ingestHours.toFixed(1)}-hour average backup window): <strong>${bandwidths.ingestDedupeMbps} Mbps (${bandwidths.ingestDedupeMBs} MB/s)</strong> (requires ~<strong>${bandwidths.ingestRawMbps} Mbps (${bandwidths.ingestRawMBs} MB/s)</strong> without source-side deduplication).<br>`;
     
     if (this.state.security.fortknox) {
-      summaryText += `• Cloud vaulting bandwidth (FortKnox 4-hour sync window): <strong>${bandwidths.vaultMbps} Mbps</strong>.<br>`;
+      summaryText += `• Cloud vaulting bandwidth (FortKnox 4-hour sync window): <strong>${bandwidths.vaultMbps} Mbps (${bandwidths.vaultMBs} MB/s)</strong>.<br>`;
     }
     if (this.state.bcdr.replication === "second-site" || this.state.bcdr.replication === "cloud-edition") {
-      summaryText += `• Off-site replication link requirements (4-hour replication window): <strong>${bandwidths.replMbps} Mbps</strong>.<br>`;
+      summaryText += `• Off-site replication link requirements (4-hour replication window): <strong>${bandwidths.replMbps} Mbps (${bandwidths.replMBs} MB/s)</strong>.<br>`;
     }
     
     this.dom.proposalSummary.innerHTML = summaryText;
@@ -1204,13 +1210,13 @@ Recommended primary cluster configuration: ${sizing.nodeRecommendation}.
     text += `\nNetwork & Bandwidth Sizing:\n`;
     text += `- Daily Backup Change Rate (Raw): ${bandwidths.dailyChangeRawTB} TB/day\n`;
     text += `- Daily Backup Change Rate (Deduplicated): ${bandwidths.dailyChangeDedupeTB} TB/day\n`;
-    text += `- Recommended Ingest Connection (${bandwidths.ingestHours.toFixed(1)}h average backup window): ${bandwidths.ingestDedupeMbps} Mbps (requires ~${bandwidths.ingestRawMbps} Mbps raw link)\n`;
+    text += `- Recommended Ingest Connection (${bandwidths.ingestHours.toFixed(1)}h average backup window): ${bandwidths.ingestDedupeMbps} Mbps (${bandwidths.ingestDedupeMBs} MB/s) (requires ~${bandwidths.ingestRawMbps} Mbps (${bandwidths.ingestRawMBs} MB/s) raw link)\n`;
     
     if (this.state.security.fortknox) {
-      text += `- FortKnox SaaS Vault Replication (4h SLA): ${bandwidths.vaultMbps} Mbps\n`;
+      text += `- FortKnox SaaS Vault Replication (4h SLA): ${bandwidths.vaultMbps} Mbps (${bandwidths.vaultMBs} MB/s)\n`;
     }
     if (this.state.bcdr.replication === "second-site" || this.state.bcdr.replication === "cloud-edition") {
-      text += `- Secondary Replication Link (4h SLA): ${bandwidths.replMbps} Mbps\n`;
+      text += `- Secondary Replication Link (4h SLA): ${bandwidths.replMbps} Mbps (${bandwidths.replMBs} MB/s)\n`;
     }
 
     text += `
@@ -1379,6 +1385,7 @@ Security checks log:
       const rawChange = wl.capacityTB * (dailyRate / 100);
       const dedupeChange = rawChange / wl.dedupe;
       const wlIngestMbps = Math.ceil((dedupeChange * 8000000) / ((wl.windowHours || 8) * 3600));
+      const wlIngestMBs = (wlIngestMbps / 8).toFixed(1).replace(/\.0$/, "");
  
       svgContent += `
         <!-- Workload Link to Cluster -->
@@ -1390,7 +1397,7 @@ Security checks log:
           <circle cx="100" cy="${yPos}" r="22" fill="#121a2f" stroke="var(--accent-blue)" stroke-width="1.5" />
           <text x="100" y="${yPos + 5}" font-size="16" text-anchor="middle">${iconChar}</text>
           <text x="135" y="${yPos - 2}" font-size="11" font-family="Inter" font-weight="700" fill="white">${wlKey.toUpperCase()}</text>
-          <text x="135" y="${yPos + 10}" font-size="9" font-family="JetBrains Mono" fill="var(--text-secondary)">${wl.capacityTB} TB (~${wlIngestMbps} Mbps)</text>
+          <text x="135" y="${yPos + 10}" font-size="9" font-family="JetBrains Mono" fill="var(--text-secondary)">${wl.capacityTB} TB (~${wlIngestMbps} Mbps / ${wlIngestMBs} MB/s)</text>
         </g>
       `;
     });
@@ -1458,8 +1465,8 @@ Security checks log:
  
         <!-- FortKnox Replication Bandwidth Badge -->
         <g transform="translate(490, 115)">
-          <rect x="-30" y="-8" width="60" height="15" rx="3" fill="#121a2f" stroke="var(--accent-purple)" stroke-width="1" />
-          <text x="0" y="3" font-family="JetBrains Mono" font-size="8" font-weight="700" fill="var(--accent-purple)" text-anchor="middle">${bandwidths.vaultMbps} Mbps</text>
+          <rect x="-55" y="-8" width="110" height="15" rx="3" fill="#121a2f" stroke="var(--accent-purple)" stroke-width="1" />
+          <text x="0" y="3" font-family="JetBrains Mono" font-size="8" font-weight="700" fill="var(--accent-purple)" text-anchor="middle">${bandwidths.vaultMbps} Mbps (${bandwidths.vaultMBs} MB/s)</text>
         </g>
 
         <!-- FortKnox Node Group -->
@@ -1513,8 +1520,8 @@ Security checks log:
  
         <!-- Secondary Replication Bandwidth Badge -->
         <g transform="translate(500, 240)">
-          <rect x="-30" y="-8" width="60" height="15" rx="3" fill="#121a2f" stroke="${replColor}" stroke-width="1" />
-          <text x="0" y="3" font-family="JetBrains Mono" font-size="8" font-weight="700" fill="${replColor}" text-anchor="middle">${bandwidths.replMbps} Mbps</text>
+          <rect x="-55" y="-8" width="110" height="15" rx="3" fill="#121a2f" stroke="${replColor}" stroke-width="1" />
+          <text x="0" y="3" font-family="JetBrains Mono" font-size="8" font-weight="700" fill="${replColor}" text-anchor="middle">${bandwidths.replMbps} Mbps (${bandwidths.replMBs} MB/s)</text>
         </g>
 
         <g class="svg-hotspot" cursor="pointer" onclick="app.showHotspot('${hotspotId}')">
