@@ -503,6 +503,127 @@ class CohesityArchitectWizard {
     };
   }
 
+  calculateBandwidth() {
+    let dailyChangeRawTB = 0;
+    let dailyChangeDedupeTB = 0;
+
+    Object.keys(this.state.workloads).forEach(type => {
+      const wl = this.state.workloads[type];
+      if (wl.active) {
+        const preset = COHESITY_DATA.workloadPresets[type];
+        const changeRate = preset ? preset.dailyChangeRate : 3; // %
+        const rawChange = wl.capacityTB * (changeRate / 100);
+        
+        dailyChangeRawTB += rawChange;
+        dailyChangeDedupeTB += (rawChange / wl.dedupe);
+      }
+    });
+
+    const ingestHours = 8;
+    const ingestRawMbps = (dailyChangeRawTB * 8000000) / (ingestHours * 3600);
+    const ingestDedupeMbps = (dailyChangeDedupeTB * 8000000) / (ingestHours * 3600);
+
+    const replHours = 4;
+    const replMbps = (dailyChangeDedupeTB * 8000000) / (replHours * 3600);
+
+    const vaultHours = 4;
+    const vaultMbps = (dailyChangeDedupeTB * 8000000) / (vaultHours * 3600);
+
+    return {
+      dailyChangeRawTB: dailyChangeRawTB.toFixed(2),
+      dailyChangeDedupeTB: dailyChangeDedupeTB.toFixed(2),
+      ingestRawMbps: Math.ceil(ingestRawMbps),
+      ingestDedupeMbps: Math.ceil(ingestDedupeMbps),
+      replMbps: Math.ceil(replMbps),
+      vaultMbps: Math.ceil(vaultMbps),
+      ingestHours,
+      replHours,
+      vaultHours
+    };
+  }
+
+  updateBandwidthUI() {
+    const bw = this.calculateBandwidth();
+    
+    // Sidebar update
+    const dailyChangeEl = document.getElementById("bw-daily-change");
+    const ingestEl = document.getElementById("bw-local-ingest");
+    const ingestRawEl = document.getElementById("bw-local-raw");
+    const replContainer = document.getElementById("bw-repl-container");
+    const replVal = document.getElementById("bw-repl-val");
+    const replLabel = document.getElementById("bw-repl-label");
+    const vaultContainer = document.getElementById("bw-vault-container");
+    const vaultVal = document.getElementById("bw-vault-val");
+
+    if (dailyChangeEl) dailyChangeEl.textContent = `${bw.dailyChangeRawTB} TB/day`;
+    if (ingestEl) ingestEl.textContent = `${bw.ingestDedupeMbps} Mbps`;
+    if (ingestRawEl) ingestRawEl.textContent = `${bw.ingestRawMbps} Mbps`;
+
+    // Secondary replication
+    if (replContainer && replVal) {
+      if (this.state.bcdr.replication === "second-site" || this.state.bcdr.replication === "cloud-edition") {
+        replContainer.style.display = "flex";
+        replVal.textContent = `${bw.replMbps} Mbps`;
+        if (replLabel) {
+          replLabel.textContent = this.state.bcdr.replication === "cloud-edition" 
+            ? "Cloud Replication (4h):" 
+            : "Site-to-Site Replication (4h):";
+        }
+      } else {
+        replContainer.style.display = "none";
+      }
+    }
+
+    // FortKnox Vaulting
+    if (vaultContainer && vaultVal) {
+      if (this.state.security.fortknox) {
+        vaultContainer.style.display = "flex";
+        vaultVal.textContent = `${bw.vaultMbps} Mbps`;
+      } else {
+        vaultContainer.style.display = "none";
+      }
+    }
+
+    // Step 3 layout elements update
+    const step3Change = document.getElementById("step3-daily-change");
+    const step3Dedupe = document.getElementById("step3-daily-dedupe");
+    const step3Ingest = document.getElementById("step3-ingest-bw");
+    const step3IngestRaw = document.getElementById("step3-ingest-raw");
+    const step3ReplContainer = document.getElementById("step3-bw-repl");
+    const step3ReplLabel = document.getElementById("step3-repl-label");
+    const step3ReplVal = document.getElementById("step3-repl-val");
+    const step3VaultContainer = document.getElementById("step3-bw-vault");
+    const step3VaultVal = document.getElementById("step3-vault-val");
+
+    if (step3Change) step3Change.textContent = `${bw.dailyChangeRawTB} TB/day`;
+    if (step3Dedupe) step3Dedupe.textContent = `${bw.dailyChangeDedupeTB} TB/day`;
+    if (step3Ingest) step3Ingest.textContent = `${bw.ingestDedupeMbps} Mbps`;
+    if (step3IngestRaw) step3IngestRaw.textContent = `${bw.ingestRawMbps} Mbps`;
+
+    if (step3ReplContainer && step3ReplVal) {
+      if (this.state.bcdr.replication === "second-site" || this.state.bcdr.replication === "cloud-edition") {
+        step3ReplContainer.style.display = "flex";
+        step3ReplVal.textContent = `${bw.replMbps} Mbps`;
+        if (step3ReplLabel) {
+          step3ReplLabel.textContent = this.state.bcdr.replication === "cloud-edition" 
+            ? "Cloud replication WAN link (4h SLA):" 
+            : "Site-to-Site replication link (4h SLA):";
+        }
+      } else {
+        step3ReplContainer.style.display = "none";
+      }
+    }
+
+    if (step3VaultContainer && step3VaultVal) {
+      if (this.state.security.fortknox) {
+        step3VaultContainer.style.display = "flex";
+        step3VaultVal.textContent = `${bw.vaultMbps} Mbps`;
+      } else {
+        step3VaultContainer.style.display = "none";
+      }
+    }
+  }
+
   calculateComplianceScore() {
     let score = 100;
     let deductList = [];
@@ -730,6 +851,7 @@ class CohesityArchitectWizard {
   updateUI() {
     this.updateSidebarStats();
     this.renderTopologyDiagram();
+    this.updateBandwidthUI();
     
     // Initialise code panel default to active tab
     const activeTab = document.querySelector(".tab-btn.active").getAttribute("data-tab");
@@ -772,6 +894,18 @@ class CohesityArchitectWizard {
     
     if (complianceNames.length > 0) {
       summaryText += `<br><br>This architecture incorporates structural configurations designed to assist with your regulatory compliance targets for <strong>${complianceNames.join(", ")}</strong>.`;
+    }
+    
+    const bandwidths = this.calculateBandwidth();
+    summaryText += `<br><br><strong>Network & Bandwidth Estimates:</strong><br>`;
+    summaryText += `• Raw daily backup change volume: <strong>${bandwidths.dailyChangeRawTB} TB/day</strong> (Deduplicated transfer footprint: <strong>${bandwidths.dailyChangeDedupeTB} TB/day</strong>).<br>`;
+    summaryText += `• Ingest network link consumption (8-hour backup window): <strong>${bandwidths.ingestDedupeMbps} Mbps</strong> (requires ~<strong>${bandwidths.ingestRawMbps} Mbps</strong> without source-side deduplication).<br>`;
+    
+    if (this.state.security.fortknox) {
+      summaryText += `• Cloud vaulting bandwidth (FortKnox 4-hour sync window): <strong>${bandwidths.vaultMbps} Mbps</strong>.<br>`;
+    }
+    if (this.state.bcdr.replication === "second-site" || this.state.bcdr.replication === "cloud-edition") {
+      summaryText += `• Off-site replication link requirements (4-hour replication window): <strong>${bandwidths.replMbps} Mbps</strong>.<br>`;
     }
     
     this.dom.proposalSummary.innerHTML = summaryText;
@@ -972,6 +1106,19 @@ Recommended primary cluster configuration: ${sizing.nodeRecommendation}.
     if (complianceNames.length > 0) {
       text += `\nRegulatory Compliance Alignment Targets: ${complianceNames.join(", ")}.\n`;
     }
+ 
+    const bandwidths = this.calculateBandwidth();
+    text += `\nNetwork & Bandwidth Sizing:\n`;
+    text += `- Daily Backup Change Rate (Raw): ${bandwidths.dailyChangeRawTB} TB/day\n`;
+    text += `- Daily Backup Change Rate (Deduplicated): ${bandwidths.dailyChangeDedupeTB} TB/day\n`;
+    text += `- Recommended Ingest Connection (8h backup window): ${bandwidths.ingestDedupeMbps} Mbps (requires ~${bandwidths.ingestRawMbps} Mbps raw link)\n`;
+    
+    if (this.state.security.fortknox) {
+      text += `- FortKnox SaaS Vault Replication (4h SLA): ${bandwidths.vaultMbps} Mbps\n`;
+    }
+    if (this.state.bcdr.replication === "second-site" || this.state.bcdr.replication === "cloud-edition") {
+      text += `- Secondary Replication Link (4h SLA): ${bandwidths.replMbps} Mbps\n`;
+    }
 
     text += `
 2. BILL OF MATERIALS (BOM) & PRICING
@@ -1058,6 +1205,7 @@ Security checks log:
 
   renderTopologyDiagram() {
     const sizing = this.calculateSizing();
+    const bandwidths = this.calculateBandwidth();
     const isFortKnox = this.state.security.fortknox;
     const isDataHawk = this.state.security.datahawk;
     const replMode = this.state.bcdr.replication;
@@ -1082,7 +1230,7 @@ Security checks log:
             <feComposite in="SourceGraphic" in2="blur" operator="over" />
           </filter>
         </defs>
-
+ 
         <!-- GRID BACKGROUND -->
         <g stroke="#ffffff" stroke-opacity="0.02" stroke-width="1">
           <line x1="0" y1="50" x2="800" y2="50" />
@@ -1100,17 +1248,23 @@ Security checks log:
           <line x1="700" y1="0" x2="700" y2="380" />
         </g>
     `;
-
+ 
     // 1. WORKLOADS (Left column)
     const activeWls = Object.keys(this.state.workloads).filter(k => this.state.workloads[k].active);
     let wlStartY = 80;
     const wlSpacing = 50;
-
+ 
     activeWls.forEach((wlKey, idx) => {
       const wl = this.state.workloads[wlKey];
       const yPos = wlStartY + (idx * wlSpacing);
       const iconChar = wlKey === "vm" ? "🖥️" : wlKey === "database" ? "🛢️" : wlKey === "files" ? "📁" : wlKey === "saas" ? "☁️" : "☸️";
       
+      const wlPreset = COHESITY_DATA.workloadPresets[wlKey];
+      const dailyRate = wlPreset ? wlPreset.dailyChangeRate : 3;
+      const rawChange = wl.capacityTB * (dailyRate / 100);
+      const dedupeChange = rawChange / wl.dedupe;
+      const wlIngestMbps = Math.ceil((dedupeChange * 8000000) / (8 * 3600));
+ 
       svgContent += `
         <!-- Workload Link to Cluster -->
         <path d="M 170 ${yPos} Q 250 ${yPos}, 330 190" fill="none" stroke="var(--accent-blue)" stroke-opacity="0.3" stroke-width="2" />
@@ -1121,7 +1275,7 @@ Security checks log:
           <circle cx="100" cy="${yPos}" r="22" fill="#121a2f" stroke="var(--accent-blue)" stroke-width="1.5" />
           <text x="100" y="${yPos + 5}" font-size="16" text-anchor="middle">${iconChar}</text>
           <text x="135" y="${yPos - 2}" font-size="11" font-family="Inter" font-weight="700" fill="white">${wlKey.toUpperCase()}</text>
-          <text x="135" y="${yPos + 10}" font-size="9" font-family="JetBrains Mono" fill="var(--text-secondary)">${wl.capacityTB} TB</text>
+          <text x="135" y="${yPos + 10}" font-size="9" font-family="JetBrains Mono" fill="var(--text-secondary)">${wl.capacityTB} TB (~${wlIngestMbps} Mbps)</text>
         </g>
       `;
     });
@@ -1186,6 +1340,12 @@ Security checks log:
         <!-- Replication Link: Cluster to FortKnox -->
         <path d="M ${clusterX + 55} ${clusterY - 30} Q 500 100, ${fkX - 60} ${fkY}" fill="none" stroke="var(--accent-purple)" stroke-width="1.5" stroke-dasharray="4,4" />
         <path d="M ${clusterX + 55} ${clusterY - 30} Q 500 100, ${fkX - 60} ${fkY}" class="flow-line" fill="none" stroke="var(--accent-purple)" stroke-opacity="0.8" stroke-width="1.5" />
+ 
+        <!-- FortKnox Replication Bandwidth Badge -->
+        <g transform="translate(490, 115)">
+          <rect x="-30" y="-8" width="60" height="15" rx="3" fill="#121a2f" stroke="var(--accent-purple)" stroke-width="1" />
+          <text x="0" y="3" font-family="JetBrains Mono" font-size="8" font-weight="700" fill="var(--accent-purple)" text-anchor="middle">${bandwidths.vaultMbps} Mbps</text>
+        </g>
 
         <!-- FortKnox Node Group -->
         <g class="svg-hotspot" cursor="pointer" onclick="app.showHotspot('fortknox')">
@@ -1196,13 +1356,13 @@ Security checks log:
           <path d="M ${fkX - 6} ${fkY - 4} L ${fkX - 6} ${fkY + 10} L ${fkX + 6} ${fkY + 10} L ${fkX + 6} ${fkY - 4} Z" fill="none" stroke="var(--accent-purple)" stroke-width="1.5"/>
           <path d="M ${fkX - 4} ${fkY - 4} A 4 4 0 0 1 ${fkX + 4} ${fkY - 4}" fill="none" stroke="var(--accent-purple)" stroke-width="1.5"/>
           <circle cx="${fkX}" cy="${fkY + 2}" r="1.5" fill="var(--accent-purple)"/>
-
+ 
           <text x="${fkX}" y="${fkY + 54}" font-family="Inter" font-size="10" font-weight="700" fill="white" text-anchor="middle">FortKnox SaaS</text>
           <text x="${fkX}" y="${fkY + 65}" font-family="JetBrains Mono" font-size="9" fill="var(--accent-purple)" text-anchor="middle" font-weight="700">Vault: ${sizing.fortKnoxVaultTB} TB</text>
         </g>
       `;
     }
-
+ 
     // Secondary Site or Public Cloud Edition - Right Bottom
     if (replMode !== "none") {
       const repX = 630;
@@ -1213,7 +1373,7 @@ Security checks log:
       let replColor = "var(--accent-blue)";
       let flowColor = "var(--accent-blue)";
       let hotspotId = "repl-second-site";
-
+ 
       if (replMode === "cloud-edition") {
         label = "Cloud Edition";
         icon = "☁️ AWS/Azure";
@@ -1230,11 +1390,17 @@ Security checks log:
         flowColor = "hsla(0,0%,100%,0.2)";
         hotspotId = "repl-saas";
       }
-
+ 
       svgContent += `
         <!-- Replication Path to Secondary -->
         <path d="M ${clusterX + 55} ${clusterY + 30} Q 500 270, ${repX - 50} ${repY}" fill="none" stroke="${flowColor}" stroke-opacity="0.3" stroke-width="1.5" />
         <path d="M ${clusterX + 55} ${clusterY + 30} Q 500 270, ${repX - 50} ${repY}" class="flow-line" fill="none" stroke="${flowColor}" stroke-opacity="0.8" stroke-width="1.5" />
+ 
+        <!-- Secondary Replication Bandwidth Badge -->
+        <g transform="translate(500, 240)">
+          <rect x="-30" y="-8" width="60" height="15" rx="3" fill="#121a2f" stroke="${replColor}" stroke-width="1" />
+          <text x="0" y="3" font-family="JetBrains Mono" font-size="8" font-weight="700" fill="${replColor}" text-anchor="middle">${bandwidths.replMbps} Mbps</text>
+        </g>
 
         <g class="svg-hotspot" cursor="pointer" onclick="app.showHotspot('${hotspotId}')">
           <rect x="${repX - 45}" y="${repY - 35}" width="90" height="70" rx="8" fill="#0d1424" stroke="${replColor}" stroke-width="1.5" />

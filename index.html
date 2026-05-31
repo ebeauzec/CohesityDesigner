@@ -398,6 +398,45 @@
               <span class="slider-switch"></span>
             </label>
           </div>
+
+          <!-- Bandwidth Estimator inside Step 3 -->
+          <div class="glass-card" style="margin-top: 20px; padding: 16px; border: 1px solid var(--border-color); background: rgba(255, 255, 255, 0.01);">
+            <h4 style="display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:13.5px; color:var(--text-primary);">
+              <span class="material-symbols-outlined" style="color:var(--accent-blue)">network_ping</span>
+              WAN Link & Bandwidth Calculator
+            </h4>
+            <p style="font-size:11.5px; color:var(--text-secondary); margin-bottom:14px; line-height:1.4;">
+              Estimated daily change data and minimum network bandwidth required to complete data transfers within scheduled SLAs:
+            </p>
+            
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:14px;">
+              <div style="background:rgba(255,255,255,0.02); padding:12px; border-radius:8px; border:1px solid var(--border-color);">
+                <div style="font-size:10px; color:var(--text-muted); text-transform:uppercase;">Daily Backup Change</div>
+                <div id="step3-daily-change" style="font-size:18px; font-weight:700; font-family:'Outfit'; color:var(--text-primary); margin-top:4px;">0 TB / day</div>
+                <div style="font-size:9.5px; color:var(--text-secondary); margin-top:2px;">Deduplicated: <span id="step3-daily-dedupe" style="font-weight:700">0 TB</span></div>
+              </div>
+              <div style="background:rgba(255,255,255,0.02); padding:12px; border-radius:8px; border:1px solid var(--border-color);">
+                <div style="font-size:10px; color:var(--text-muted); text-transform:uppercase;">Ingest Bandwidth (8h)</div>
+                <div id="step3-ingest-bw" style="font-size:18px; font-weight:700; font-family:'Outfit'; color:var(--accent-green); margin-top:4px;">0 Mbps</div>
+                <div style="font-size:9.5px; color:var(--text-secondary); margin-top:2px;">Raw link: <span id="step3-ingest-raw" style="font-weight:700">0 Mbps</span></div>
+              </div>
+            </div>
+
+            <!-- Replica / Vault estimates inside Step 3 -->
+            <div id="step3-bw-repl" style="border-top:1px solid var(--border-color); padding-top:12px; display:none; justify-content:space-between; align-items:center; font-size:11.5px;">
+              <span id="step3-repl-label" style="color:var(--text-secondary)">Secondary Replication (4h SLA):</span>
+              <strong id="step3-repl-val" style="color:var(--accent-blue); font-family:'JetBrains Mono'">0 Mbps</strong>
+            </div>
+
+            <div id="step3-bw-vault" style="border-top:1px solid var(--border-color); padding-top:12px; display:none; justify-content:space-between; align-items:center; font-size:11.5px; margin-top:8px;">
+              <span style="color:var(--text-secondary)">FortKnox Vaulting (4h SLA):</span>
+              <strong id="step3-vault-val" style="color:var(--accent-purple); font-family:'JetBrains Mono'">0 Mbps</strong>
+            </div>
+            
+            <div style="font-size:9.5px; color:var(--text-muted); line-height:1.4; border-top:1px solid var(--border-color); margin-top:12px; padding-top:8px;">
+              💡 <strong>SE Architect Tip:</strong> Cohesity's source-side deduplication (using the Cohesity Agent or direct hypervisor API integration) transmits only unique, compressed change blocks, significantly reducing network requirements compared to legacy backups.
+            </div>
+          </div>
         </div>
 
         <!-- WIZARD STEP 4: Cyber Resilience Security -->
@@ -636,6 +675,48 @@
           <div style="display:flex; justify-content:space-between; border-top:1px solid var(--border-color); padding-top:12px; font-size:11px;">
             <div>Target RPO: <strong id="rec-rpo-sla" style="color:white">1hr</strong></div>
             <div>Target RTO: <strong id="rec-rto-sla" style="color:white">4hr</strong></div>
+          </div>
+        </section>
+
+        <!-- Network Bandwidth Estimates -->
+        <section class="glass-card dashboard-widget">
+          <h3 class="widget-title">
+            <span>Estimated Network Bandwidth</span>
+            <span class="material-symbols-outlined" style="color:var(--accent-blue)">settings_ethernet</span>
+          </h3>
+          
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <div class="metric-row">
+              <span class="metric-label" style="font-size: 11px;">Daily Backup Change Rate:</span>
+              <span id="bw-daily-change" style="font-weight: 700; font-family: 'JetBrains Mono'; font-size: 12px; color: var(--text-primary);">0 TB / day</span>
+            </div>
+            
+            <div class="metric-row">
+              <span class="metric-label" style="font-size: 11px;">Local Backup Ingest:</span>
+              <span id="bw-local-ingest" style="font-weight: 700; font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-green);">0 Mbps</span>
+            </div>
+            <div style="font-size: 9.5px; color: var(--text-secondary); margin-top: -6px; line-height: 1.3;">
+              Sized for an 8h backup window (Raw ingest requires <span id="bw-local-raw" style="font-weight:700">0 Mbps</span>). Source-side deduplication reduces local WAN transfer bandwidth.
+            </div>
+
+            <!-- FortKnox or Replication Bandwidth (Dynamic based on selections) -->
+            <div id="bw-repl-container" style="border-top: 1px solid var(--border-color); padding-top: 10px; display: none; flex-direction: column; gap: 8px;">
+              <div class="metric-row">
+                <span class="metric-label" id="bw-repl-label" style="font-size: 11px;">Replication Upload (4h):</span>
+                <span id="bw-repl-val" style="font-weight: 700; font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-blue);">0 Mbps</span>
+              </div>
+            </div>
+
+            <div id="bw-vault-container" style="border-top: 1px solid var(--border-color); padding-top: 10px; display: none; flex-direction: column; gap: 8px;">
+              <div class="metric-row">
+                <span class="metric-label" style="font-size: 11px;">FortKnox Cloud Vault (4h):</span>
+                <span id="bw-vault-val" style="font-weight: 700; font-family: 'JetBrains Mono'; font-size: 12px; color: var(--accent-purple);">0 Mbps</span>
+              </div>
+            </div>
+
+            <div style="border-top: 1px solid var(--border-color); padding-top: 8px; font-size: 10px; color: var(--text-muted); text-align: center; font-style: italic;">
+              Calculated dynamically using workload change rates.
+            </div>
           </div>
         </section>
 
