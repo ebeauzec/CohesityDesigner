@@ -75,7 +75,7 @@ class CohesityArchitectWizard {
     
     // Playbook tabs
     this.dom.tabBtns = document.querySelectorAll(".tab-btn");
-    this.dom.tabPanes = document.querySelectorAll(".tab-pane");
+    this.dom.playbookGuide = document.getElementById("playbook-guide-content");
     this.dom.codePre = document.getElementById("code-display");
     this.dom.copyBtn = document.getElementById("copy-btn");
     
@@ -275,14 +275,6 @@ class CohesityArchitectWizard {
         
         this.dom.tabBtns.forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
-        
-        this.dom.tabPanes.forEach(pane => {
-          if (pane.id === `tab-${targetTab}`) {
-            pane.classList.add("active");
-          } else {
-            pane.classList.remove("active");
-          }
-        });
         
         this.updateIntegrationCode(targetTab);
       });
@@ -667,7 +659,71 @@ class CohesityArchitectWizard {
     if (snippet) {
       document.getElementById("code-title").textContent = snippet.title;
       document.getElementById("code-desc").textContent = snippet.description;
-      this.dom.codePre.textContent = snippet.code;
+
+      let codeText = snippet.code;
+
+      // Calculate active customer values for replacements based on user choices
+      const projectName = this.state.project.name || "Enterprise Resilient Infrastructure";
+      const slugName = projectName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "cohesity-cluster";
+      const domainName = `${slugName}.local`;
+      const clusterFqdn = `cluster.${domainName}`;
+      const splunkIp = "192.168.10.88";
+      const tokenSplunk = "3A1F49BE-F658-E978-1563-22950731A54F";
+      const apiKeyHelios = "Helios_API_Key_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
+
+      // Workload dynamic names based on actual inputs
+      let dbName = "VM-Prod-SQL01";
+      let vmName = "VM-Prod-App01";
+      if (this.state.workloads.database.active) {
+        dbName = `db-${slugName}-01`;
+      }
+      if (this.state.workloads.vm.active) {
+        vmName = `vm-${slugName}-app-01`;
+      }
+
+      // Target network mappings
+      const primaryVlan = "vlan-100-prod";
+      const drVlan = "vlan-200-dr";
+      const primaryVcenter = "vcenter-prod.local";
+      const drVcenter = "vcenter-dr.local";
+
+      // Replace placeholders in the code
+      codeText = codeText
+        .replace(/<CUSTOMER_PROJECT_NAME>/g, projectName)
+        .replace(/<CUSTOMER_COHESITY_CLUSTER_FQDN>/g, clusterFqdn)
+        .replace(/<COHESITY_CLUSTER_IP_OR_FQDN>/g, clusterFqdn)
+        .replace(/<COHESITY_CLUSTER_ID_GUID>/g, "12485906325-10492-9582")
+        .replace(/<SPLUNK_HEC_COLLECTOR_IP>/g, splunkIp)
+        .replace(/<SPLUNK_COLLECTOR_IP>/g, splunkIp)
+        .replace(/<SPLUNK_HEC_TOKEN_GUID>/g, tokenSplunk)
+        .replace(/<HELIOS_REST_API_KEY_TOKEN>/g, apiKeyHelios)
+        .replace(/<TARGET_ESXI_HOST_OR_VCENTER>/g, "esxi-host-01.local")
+        .replace(/<TARGET_ESXI_HOST>/g, "esxi-host-01.local")
+        .replace(/<PRIMARY_VLAN_NETWORK_ID>/g, primaryVlan)
+        .replace(/<DR_VLAN_NETWORK_ID>/g, drVlan)
+        .replace(/<PRIMARY_VCENTER_FQDN_OR_IP>/g, primaryVcenter)
+        .replace(/<DR_VCENTER_FQDN_OR_IP>/g, drVcenter)
+        .replace(/<DATABASE_WORKLOAD_NAME_e.g_VM-SQL-01>/g, dbName)
+        .replace(/<VM_WORKLOAD_NAME_e.g_VM-App-01>/g, vmName)
+        .replace(/<COHESITY_ADMIN_USER>/g, "cohesity_admin")
+        .replace(/<COHESITY_ADMIN_PASSWORD>/g, "••••••••••••••••")
+        .replace(/<AD_DOMAIN_FQDN_e.g_domain.local>/g, domainName)
+        .replace(/<AD_ADMIN_USER>/g, "ad_admin")
+        .replace(/<AD_ADMIN_PASSWORD>/g, "••••••••••••••••");
+
+      this.dom.codePre.textContent = codeText;
+
+      // Update guide content with dynamically resolved IP addresses and values
+      if (this.dom.playbookGuide) {
+        let guideText = snippet.guide;
+        guideText = guideText
+          .replace(/&lt;PRIMARY_VLAN_NETWORK_ID&gt;/g, primaryVlan)
+          .replace(/&lt;DR_VLAN_NETWORK_ID&gt;/g, drVlan)
+          .replace(/&lt;SPLUNK_COLLECTOR_IP&gt;/g, splunkIp)
+          .replace(/&lt;SPLUNK_HEC_TOKEN_GUID&gt;/g, tokenSplunk);
+
+        this.dom.playbookGuide.innerHTML = guideText;
+      }
     }
   }
 

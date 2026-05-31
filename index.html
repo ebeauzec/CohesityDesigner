@@ -718,27 +718,39 @@
     <section class="glass-card playbook-card" style="margin-top:24px;">
       <h3 style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
         <span class="material-symbols-outlined" style="color:var(--accent-blue)">terminal</span>
-        Enterprise Integration Snippet Playbooks
+        Enterprise Integration Snippets & Playbooks
       </h3>
       
       <div class="tabs-header">
         <button class="tab-btn active" data-tab="splunk">Splunk SIEM Webhook</button>
-        <button class="tab-btn" data-tab="servicenow">ServiceNow API Restore</button>
-        <button class="tab-btn" data-tab="sitecontinuity">SiteContinuity runbook YAML</button>
+        <button class="tab-btn" data-tab="servicenow">ServiceNow REST Script</button>
+        <button class="tab-btn" data-tab="sitecontinuity">SiteContinuity Runbook</button>
+        <button class="tab-btn" data-tab="ansible">Ansible Playbook</button>
       </div>
 
-      <div class="tab-pane active" id="tab-splunk">
-        <h4 id="code-title" style="font-size:14px; margin-bottom:6px; color:var(--text-primary);">SIEM Integration</h4>
-        <p id="code-desc" style="font-size:11px; color:var(--text-secondary); margin-bottom:12px;">Trigger feed.</p>
-        
-        <div class="code-container">
-          <button id="copy-btn" class="copy-btn">Copy</button>
-          <pre><code id="code-display">// Splunk integration payload</code></pre>
+      <div style="display:grid; grid-template-columns:1fr 340px; gap:20px; align-items:start;">
+        <!-- Left Side: Generated Code -->
+        <div style="display:flex; flex-direction:column; gap:10px; min-height:360px;">
+          <h4 id="code-title" style="font-size:14px; color:var(--text-primary);">SIEM Integration</h4>
+          <p id="code-desc" style="font-size:11.5px; color:var(--text-secondary); line-height:1.4; margin-bottom:6px;">Forward logs.</p>
+          
+          <div class="code-container" style="flex:1;">
+            <button id="copy-btn" class="copy-btn">Copy</button>
+            <pre><code id="code-display">// Generated payload</code></pre>
+          </div>
+        </div>
+
+        <!-- Right Side: Implementation instructions -->
+        <div class="glass-card" style="background:rgba(255,255,255,0.02); padding:20px; border-radius:12px; border:1px solid var(--border-color); display:flex; flex-direction:column; gap:12px; min-height:410px;">
+          <h4 style="font-size:13.5px; color:var(--accent-green); border-bottom:1px solid var(--border-color); padding-bottom:8px; display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+            <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">help_outline</span>
+            Deployment Guide
+          </h4>
+          <div id="playbook-guide-content" style="font-size:11.5px; line-height:1.5; color:var(--text-secondary);">
+            <!-- Populated dynamically via app.js -->
+          </div>
         </div>
       </div>
-
-      <div class="tab-pane" id="tab-servicenow"></div>
-      <div class="tab-pane" id="tab-sitecontinuity"></div>
     </section>
 
     <footer style="margin-top:40px; border-top:1px solid var(--border-color); padding:16px 0; text-align:center; font-size:11px; color:var(--text-muted);">

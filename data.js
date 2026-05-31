@@ -259,40 +259,51 @@ const COHESITY_DATA = {
 
   integrationSnippets: {
     splunk: {
-      title: "SIEM Threat Feed Integration (Splunk Event Hub)",
-      description: "Forward security events and anomalous behavior logs detected by Cohesity DataHawk to your centralized Splunk SIEM for real-time security alerts.",
-      code: `// Cohesity API v2 REST Payload for Splunk Webhook Notification
-// Target Endpoint: https://splunk-collector.domain.local:8088/services/collector
+      title: "SIEM Threat Feed Integration (Splunk HEC)",
+      description: "Forward security anomalies, Ransomware alerts, and DataHawk threat logs detected by Cohesity to your central Splunk SIEM.",
+      code: `// Cohesity Helios Webhook Web Event Payload
+// Target: https://<SPLUNK_HEC_COLLECTOR_IP>:8088/services/collector/raw
 {
   "event": {
     "source": "CohesityDataHawk",
     "sourcetype": "_json",
-    "host": "cohesity-cluster-01.domain.local",
+    "host": "<CUSTOMER_COHESITY_CLUSTER_FQDN>",
     "event_type": "DataHawkAnomalyAlert",
     "severity": "CRITICAL",
     "details": {
-      "cluster_id": "893740294719",
+      "cluster_id": "<COHESITY_CLUSTER_ID_GUID>",
+      "affected_entity": "<WORKLOAD_NAME_e.g_VM-SQL-01>",
       "anomaly_type": "HighEntropyRateDetect",
-      "affected_entity": "VM-Prod-SQL01",
-      "anomaly_score": 92.5,
-      "detected_at": "2026-05-30T07:40:00Z",
+      "anomaly_score": "92.5",
+      "detected_at": "2026-05-31T14:50:00Z",
       "entropy_change_rate": "+350%",
-      "recommended_action": "Isolate VM; trigger FortKnox cleanroom integrity scan; hold snaps."
+      "recommended_action": "Isolate VM; trigger FortKnox cleanroom integrity scan; lock snapshots."
     }
   }
-}`
+}`,
+      guide: `<strong>Where to Configure:</strong><br>
+Configure inside the <strong>Cohesity Helios SaaS Management Portal</strong> under Webhook Notifications.<br><br>
+<strong>How to Implement:</strong><br>
+1. Log into Cohesity Helios (<a href="https://helios.cohesity.com" target="_blank" style="color:var(--accent-green)">helios.cohesity.com</a>).<br>
+2. Navigate to <strong>Settings (Gear Icon) -> Webhooks -> Add Webhook</strong>.<br>
+3. Enter Webhook Name: <code>Splunk-HEC-Collector</code>.<br>
+4. Set URL to your Splunk HTTP Event Collector: <code>https://&lt;SPLUNK_COLLECTOR_IP&gt;:8088/services/collector</code>.<br>
+5. Add custom headers: Set Key: <code>Authorization</code>, Value: <code>Splunk &lt;SPLUNK_HEC_TOKEN_GUID&gt;</code>.<br>
+6. Check Event Type checkboxes: <code>Ransomware Anomaly Alerts</code> and <code>Threat Detection Events</code>.<br>
+7. Click <strong>Test and Save</strong> to trigger a test payload.`
     },
     servicenow: {
-      title: "ServiceNow Automation - Recovery Trigger API",
-      description: "Trigger an automated orchestration workflow in ServiceNow to restore a system or file path when an IT service ticket is approved.",
-      code: `# Python 3 code snippet for Sales Engineers to showcase ServiceNow webhook integrations
+      title: "ServiceNow Automation - Instant Recovery REST Script",
+      description: "Trigger an automated instant recovery API request from ServiceNow flow designer when a recovery approval ticket is signed off.",
+      code: `# Python 3 execution script designed for ServiceNow MID Server script actions
 import requests
 import json
 
 COHESITY_HELIOS_URL = "https://helios.cohesity.com/api/v2"
-API_KEY = "Bearer SE-TOKEN-XXXX-YYYY-ZZZZ"
+# Helios API key record stored securely in ServiceNow
+API_KEY = "Bearer <HELIOS_REST_API_KEY_TOKEN>"
 
-def trigger_instant_restore(vm_name, target_host):
+def trigger_instant_restore(workload_name, target_host):
     headers = {
         "Authorization": API_KEY,
         "Content-Type": "application/json"
@@ -301,32 +312,52 @@ def trigger_instant_restore(vm_name, target_host):
     payload = {
         "restore_type": "InstantRecovery",
         "vm_workload_params": {
-            "source_vm_name": vm_name,
-            "target_hypervisor": target_host,
+            "source_vm_name": workload_name,
+            "target_hypervisor": target_host, # e.g. <TARGET_ESXI_HOST_OR_VCENTER>
             "power_on": True,
             "rename_suffix": "-Restored-ServiceNow"
         },
-        "recovery_point": "latest_clean_snapshot" # DataHawk selected malware-free snapshot
+        "recovery_point": "latest_clean_snapshot" # Auto-selected malware-free recovery point
     }
     
+    print(f"Triggering Cohesity Instant Restore for {workload_name}...")
     response = requests.post(
         f"{COHESITY_HELIOS_URL}/recoveries", 
         data=json.dumps(payload), 
         headers=headers
     )
-    return response.json()`
+    return response.json()
+
+# Example Trigger execution
+# trigger_instant_restore("<WORKLOAD_NAME_e.g_VM-SQL-01>", "<TARGET_ESXI_HOST>")`,
+      guide: `<strong>Where to Configure:</strong><br>
+Deploy inside <strong>ServiceNow Flow Designer</strong> as a custom Python Step script running on a ServiceNow MID Server.<br><br>
+<strong>How to Implement:</strong><br>
+1. In ServiceNow, navigate to <strong>Flow Designer -> New Action</strong>.<br>
+2. Add input parameters: <code>workload_name</code>, <code>target_host</code>, and <code>ticket_id</code>.<br>
+3. Add a <strong>REST Step</strong> to configure the Helios connection details, or add a <strong>Script Step</strong> (selecting Python) and paste the code.<br>
+4. Bind variables: Map the inputs to script arguments.<br>
+5. Set up triggers: Create a flow that launches when a Service Catalog Ticket (type: 'Restore Request') status transitions to 'Approved'.<br>
+6. Link flow to execution: run the custom action passing ticket variables.`
     },
     sitecontinuity: {
-      title: "DR Orchestration - SiteContinuity Runbook Configuration",
-      description: "A declarative orchestration plan representation showing multi-tier application ordering (Web, App, DB) and dependency checking.",
-      code: `# Cohesity SiteContinuity Runbook Blueprint
+      title: "SiteContinuity DR Runbook Blueprint (YAML)",
+      description: "Declarative orchestration layout outlining application failover startup sequences, database boot priorities, and post-check ports validation.",
+      code: `# Cohesity SiteContinuity Runbook YAML Template
+# Mapped for: <CUSTOMER_PROJECT_NAME>
 runbook_name: "CRM-Production-DR"
-failover_trigger: Automated | Manual
+failover_trigger: Manual | Automated
+network_mappings:
+  - source_network_id: "<PRIMARY_VLAN_NETWORK_ID>"
+    target_network_id: "<DR_VLAN_NETWORK_ID>"
+    vcenter_source: "<PRIMARY_VCENTER_FQDN_OR_IP>"
+    vcenter_target: "<DR_VCENTER_FQDN_OR_IP>"
+
 failover_phases:
   - phase: 1
-    name: "Database Tier Start"
+    name: "Database Ingestion Tier Start"
     workloads:
-      - id: "VM-Prod-SQL01"
+      - id: "<DATABASE_WORKLOAD_NAME_e.g_VM-SQL-01>"
         action: "PowerOn"
         recovery_type: "InstantRecovery"
     post_check:
@@ -335,15 +366,70 @@ failover_phases:
       timeout_seconds: 180
   
   - phase: 2
-    name: "Application Tier Start"
+    name: "Application Virtual Tier Start"
     workloads:
-      - id: "VM-Prod-App01"
+      - id: "<VM_WORKLOAD_NAME_e.g_VM-App-01>"
         action: "PowerOn"
     post_check:
       type: "HTTPGetCheck"
       url: "http://localhost:8080/health"
       expected_status: 200
-      timeout_seconds: 120`
+      timeout_seconds: 120`,
+      guide: `<strong>Where to Configure:</strong><br>
+Upload inside the <strong>Cohesity SiteContinuity DR Dashboard</strong> under Runbooks.<br><br>
+<strong>How to Implement:</strong><br>
+1. Log into Cohesity Helios, and select <strong>SiteContinuity (DR)</strong> from the service selector.<br>
+2. Navigate to <strong>Runbooks -> Create / Import Runbook</strong>.<br>
+3. Click <strong>Upload YAML Config</strong> and select this file.<br>
+4. Replace placeholders: Map <code>&lt;PRIMARY_VLAN_NETWORK_ID&gt;</code> and <code>&lt;DR_VLAN_NETWORK_ID&gt;</code> to your target Cisco/VMware PortGroups.<br>
+5. Match workload names to virtual machine nodes detected by DataProtect.<br>
+6. Click <strong>Dry-Run Test</strong> to simulate a failover without interrupting production systems.`
+    },
+    ansible: {
+      title: "Ansible Playbook - Cohesity Cluster Init & Protection",
+      description: "Automate cluster administration tasks. Registers a new Cohesity cluster, connects Active Directory, and deploys standard protection policies.",
+      code: `# Ansible Playbook for Cohesity Cluster Bootstrapping
+---
+- name: Initialize Cohesity Resilient Policies
+  hosts: localhost
+  gather_facts: false
+  
+  vars:
+    cohesity_cluster: "<COHESITY_CLUSTER_IP_OR_FQDN>"
+    cohesity_username: "<COHESITY_ADMIN_USER>"
+    cohesity_password: "<COHESITY_ADMIN_PASSWORD>"
+    ad_domain: "<AD_DOMAIN_FQDN_e.g_domain.local>"
+    ad_username: "<AD_ADMIN_USER>"
+    ad_password: "<AD_ADMIN_PASSWORD>"
+
+  tasks:
+    - name: Connect Active Directory Authentication Source
+      cohesity.cohesity.cohesity_active_directory:
+        cluster: "{{ cohesity_cluster }}"
+        username: "{{ cohesity_username }}"
+        password: "{{ cohesity_password }}"
+        domain_name: "{{ ad_domain }}"
+        ad_username: "{{ ad_username }}"
+        ad_password: "{{ ad_password }}"
+        state: present
+
+    - name: Create Immutable Backup Protection Policy
+      cohesity.cohesity.cohesity_policy:
+        cluster: "{{ cohesity_cluster }}"
+        username: "{{ cohesity_username }}"
+        password: "{{ cohesity_password }}"
+        name: "SLA-Resilient-Policy"
+        days_to_keep: 30
+        datalock_enforced: true # Immutable WORM Lock
+        state: present`,
+      guide: `<strong>Where to Configure:</strong><br>
+Save as a playbook file on your <strong>Ansible Controller Node</strong> or load as a Template inside <strong>Ansible Automation Platform (Tower)</strong>.<br><br>
+<strong>How to Implement:</strong><br>
+1. On your control node, install the Cohesity Ansible collection: <code>ansible-galaxy collection install cohesity.cohesity</code>.<br>
+2. Create a file named <code>cohesity_bootstrap.yml</code> and paste this code.<br>
+3. Replace placeholders. It is strongly recommended to encrypt sensitive fields (like <code>cohesity_password</code>) using <code>ansible-vault</code>.<br>
+4. Run the playbook in your terminal: <code>ansible-playbook cohesity_bootstrap.yml --ask-vault-pass</code>.<br>
+5. Verify on Helios that the domain shows as registered and the immutable policy is active.`
     }
   }
 };
