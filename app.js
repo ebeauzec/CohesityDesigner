@@ -89,6 +89,8 @@ class CohesityArchitectWizard {
     this.dom.proposalSummary = document.getElementById("proposal-exec-summary");
     this.dom.proposalBOMTable = document.getElementById("proposal-bom-table");
     this.dom.proposalRoadmap = document.getElementById("proposal-roadmap-timeline");
+    this.dom.proposalComplianceSection = document.getElementById("proposal-compliance-section");
+    this.dom.proposalComplianceMapping = document.getElementById("proposal-compliance-mapping");
   }
 
   bindEvents() {
@@ -1069,6 +1071,56 @@ class CohesityArchitectWizard {
     });
 
     this.dom.proposalRoadmap.innerHTML = roadmapHTML;
+
+    // 4. Generate Compliance mapping details
+    if (this.dom.proposalComplianceSection && this.dom.proposalComplianceMapping) {
+      const activeComplianceKeys = this.state.project.compliance || [];
+      
+      if (activeComplianceKeys.length > 0) {
+        this.dom.proposalComplianceSection.style.display = "block";
+        let complianceHTML = "";
+        
+        activeComplianceKeys.forEach(key => {
+          const framework = COHESITY_DATA.complianceFrameworks[key];
+          if (framework) {
+            complianceHTML += `
+              <div style="background: rgba(255, 255, 255, 0.01); border: 1px solid var(--border-color); padding: 14px; border-radius: 8px; margin-bottom: 12px;">
+                <h4 style="font-size: 13.5px; color: var(--accent-green); margin-bottom: 8px; font-family: 'Outfit';">${framework.name}</h4>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+            `;
+            
+            if (framework.details && framework.details.length > 0) {
+              framework.details.forEach(item => {
+                complianceHTML += `
+                  <div style="font-size: 12px; line-height: 1.45;">
+                    <strong style="color: white; display: inline-block; margin-right: 6px;">${item.part}:</strong>
+                    <span style="color: var(--text-secondary);">${item.how}</span>
+                  </div>
+                `;
+              });
+            } else {
+              framework.requirements.forEach(req => {
+                complianceHTML += `
+                  <div style="font-size: 12px; line-height: 1.45; display: flex; align-items: flex-start; gap: 6px;">
+                    <span style="color: var(--accent-green);">✔</span>
+                    <span style="color: var(--text-secondary);">${req}</span>
+                  </div>
+                `;
+              });
+            }
+            
+            complianceHTML += `
+                </div>
+              </div>
+            `;
+          }
+        });
+        
+        this.dom.proposalComplianceMapping.innerHTML = complianceHTML;
+      } else {
+        this.dom.proposalComplianceSection.style.display = "none";
+      }
+    }
   }
 
   copyProposalToClipboard() {
@@ -1193,6 +1245,28 @@ Security checks log:
       text += `- ${check.label}: [${check.pass ? 'PASS' : 'FAIL'}]\n`;
     });
 
+    const activeComplianceKeys = this.state.project.compliance || [];
+    if (activeComplianceKeys.length > 0) {
+      text += `\n5. DATA GOVERNANCE & REGULATORY COMPLIANCE MAPPING\n`;
+      text += `--------------------------------------------------\n`;
+      
+      activeComplianceKeys.forEach(key => {
+        const framework = COHESITY_DATA.complianceFrameworks[key];
+        if (framework) {
+          text += `\n* ${framework.name} *\n`;
+          if (framework.details && framework.details.length > 0) {
+            framework.details.forEach(item => {
+              text += `- [${item.part}] ${item.how}\n`;
+            });
+          } else {
+            framework.requirements.forEach(req => {
+              text += `- ${req}\n`;
+            });
+          }
+        }
+      });
+    }
+ 
     navigator.clipboard.writeText(text);
     
     // Visual button feedback
@@ -1521,6 +1595,70 @@ Security checks log:
       checklistHTML = `<div style="color: #2b701d; font-weight: bold;">✅ Exemplary Cyber Security: All primary hardening checks are passing!</div>`;
     }
 
+    let printComplianceHTML = "";
+    const activeComplianceKeys = this.state.project.compliance || [];
+    if (activeComplianceKeys.length > 0) {
+      printComplianceHTML += `
+        <div class="print-page" style="page-break-before: always;">
+          <div class="print-header">
+            <h1 style="font-size: 20pt; margin: 0; color: #111;">Cohesity Solution Design (Cont.)</h1>
+            <p style="font-size: 9pt; color: #666; margin: 4px 0 0 0;">Project: ${this.state.project.name} | Governance Details</p>
+          </div>
+          <div class="print-section">
+            <h2>6. Regulatory Compliance & Data Governance Mapping</h2>
+            <p>The Cohesity DataCloud architecture is designed to map directly to strict regulatory framework requirements. Below is the mapping detail for the selected compliance frameworks:</p>
+      `;
+
+      activeComplianceKeys.forEach(key => {
+        const framework = COHESITY_DATA.complianceFrameworks[key];
+        if (framework) {
+          printComplianceHTML += `
+            <div style="margin-top: 14px; border: 1px solid #ddd; padding: 10px; border-radius: 6px; page-break-inside: avoid;">
+              <h3 style="font-size: 11pt; color: #1e7e34; margin: 0 0 6px 0; border-bottom: 1.5px solid #eee; padding-bottom: 4px; font-weight: 700;">${framework.name}</h3>
+              <table style="width: 100%; border-collapse: collapse; font-size: 8.5pt; text-align: left;">
+                <thead>
+                  <tr style="border-bottom: 1px solid #ccc; font-weight: bold; background: #fafafa;">
+                    <th style="padding: 6px 4px; width: 30%;">Requirement / Clause</th>
+                    <th style="padding: 6px 4px;">Architectural Compliance Resolution</th>
+                  </tr>
+                </thead>
+                <tbody>
+          `;
+
+          if (framework.details && framework.details.length > 0) {
+            framework.details.forEach(item => {
+              printComplianceHTML += `
+                <tr style="border-bottom: 1px solid #eee;">
+                  <td style="padding: 6px 4px; font-weight: bold; vertical-align: top; color: #333;">${item.part}</td>
+                  <td style="padding: 6px 4px; vertical-align: top; color: #555; line-height: 1.3;">${item.how}</td>
+                </tr>
+              `;
+            });
+          } else {
+            framework.requirements.forEach(req => {
+              printComplianceHTML += `
+                <tr style="border-bottom: 1px solid #eee;">
+                  <td style="padding: 6px 4px; font-weight: bold; vertical-align: top; color: #333;">General Requirement</td>
+                  <td style="padding: 6px 4px; vertical-align: top; color: #555; line-height: 1.3;">${req}</td>
+                </tr>
+              `;
+            });
+          }
+
+          printComplianceHTML += `
+                </tbody>
+              </table>
+            </div>
+          `;
+        }
+      });
+
+      printComplianceHTML += `
+          </div>
+        </div>
+      `;
+    }
+
     const printWrapper = document.getElementById("printable-report-wrapper");
     printWrapper.innerHTML = `
       <div class="print-page">
@@ -1688,6 +1826,7 @@ Security checks log:
           </div>
         </div>
       </div>
+      ${printComplianceHTML}
     `;
 
     window.print();

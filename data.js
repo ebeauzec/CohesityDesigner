@@ -190,6 +190,11 @@ const COHESITY_DATA = {
         "WORM Storage (DataLock) to prevent alteration of compliance records",
         "Cohesity DataHawk sensitive data scanning to locate PII (Right to be Forgotten)",
         "Zero Trust multi-party authorization to restrict privileged users"
+      ],
+      details: [
+        { part: "Article 32 - Security of Processing", how: "Satisfied via AES-256 data encryption at rest and in transit, securing backup streams across all storage pools." },
+        { part: "Article 17 - Right to Erasure ('Right to be Forgotten')", how: "Satisfied via Cohesity DataHawk ML-driven sensitive data classification, enabling search and indexation of PII across backup silos without database restores." },
+        { part: "Article 32(1)(c) - Availability and Resilience", how: "Satisfied via DataLock WORM snapshot immutability and multi-party quorum gatekeepers (MPA), protecting snapshots from unauthorized deletion or ransomware alteration." }
       ]
     },
     hipaa: {
@@ -199,6 +204,12 @@ const COHESITY_DATA = {
         "Automated encryption key rotation (KMS integration)",
         "Cohesity DataHawk threat intelligence to prevent malicious data exposure",
         "Virtually air-gapped off-site backups (FortKnox) for remote disaster recovery"
+      ],
+      details: [
+        { part: "§ 164.312(a)(2)(iv) - Encryption & Decryption", how: "Satisfied via AES-256 data encryption with integration to external Key Management Systems (KMS) for key rotation." },
+        { part: "§ 164.312(b) - Audit Controls", how: "Satisfied via Helios immutable, non-repudiable audit logging tracking all read/write/restore actions on health records." },
+        { part: "§ 164.312(c)(1) - Data Integrity", how: "Satisfied via DataHawk behavioral anomaly analysis, flagging ransomware encryption indicators (entropy spikes) inside ePHI files." },
+        { part: "§ 164.308(a)(7)(ii)(A) - Data Backup Plan", how: "Satisfied via offsite cyber vaulting (Cohesity FortKnox) providing a virtually air-gapped, read-only copy of electronic PHI in the cloud." }
       ]
     },
     pcidss: {
@@ -208,6 +219,12 @@ const COHESITY_DATA = {
         "Quorum-based Multi-Party Authorization (MPA) for target deletion",
         "Real-time threat scanning for cardholder databases inside snapshots",
         "Continuous compliance scanning and configuration validation audits"
+      ],
+      details: [
+        { part: "Requirement 3 - Protect Stored Account Data", how: "Satisfied via full disk and storage pool AES-256 encryption, preventing raw drive extraction from cardholder data environments (CDE)." },
+        { part: "Requirement 10 - Log & Monitor Access", how: "Satisfied via centralized audit logging in Helios, tracking all administrative events and restoring of payment databases." },
+        { part: "Requirement 11 - Threat Diagnostics", how: "Satisfied via DataHawk ML signature and threat scanning, detecting Trojan or malware scripts inside card processing backups." },
+        { part: "Requirement 12 - Quorum & Governance", how: "Satisfied via Multi-Party Authorization (MPA) requiring secondary validation before deleting card database backups." }
       ]
     },
     nis2: {
@@ -217,6 +234,11 @@ const COHESITY_DATA = {
         "Automated recovery playbooks and DR testing sandbox (SiteContinuity)",
         "Isolated immutable cyber vaulting (FortKnox) to guarantee business continuity",
         "Cleanroom recovery testing environment (malware scanning before restore)"
+      ],
+      details: [
+        { part: "Article 21 - Incident Handling & Diagnostics", how: "Satisfied via DataHawk real-time ransomware diagnostics, analyzing entropy rate anomalies in file streams." },
+        { part: "Article 21(2) - Business Continuity", how: "Satisfied via SiteContinuity DR orchestration, coordinating multi-site failovers and sandbox disaster testing drills." },
+        { part: "Article 21(2)(c) - Cyber Resilience", how: "Satisfied via FortKnox air-gapped SaaS cyber vaulting, guaranteeing an unalterable storage tier outside the primary network domain." }
       ]
     },
     dora: {
@@ -226,6 +248,11 @@ const COHESITY_DATA = {
         "Continuous Data Protection (CDP) journaling for near-zero data loss SLAs",
         "Isolated FortKnox SaaS vault to satisfy third-party data recovery isolation rules",
         "Semi-annual non-disruptive DR failover walkthrough audit logs"
+      ],
+      details: [
+        { part: "Article 11 - Digital Resilience Testing", how: "Satisfied via SiteContinuity automation scripts, performing non-disruptive sandbox recovery testing drills and outputting audit logs." },
+        { part: "Article 12 - Backup Policy & Recovery SLAs", how: "Satisfied via Continuous Data Protection (CDP) journaling, guaranteeing near-zero RPOs for high-frequency transactional data streams." },
+        { part: "Article 26 - Third-Party Risk Control", how: "Satisfied via offloading secondary protection copies to the isolated FortKnox SaaS cloud, ensuring backup availability if the primary cloud provider crashes." }
       ]
     },
     fedramp: {
@@ -235,6 +262,11 @@ const COHESITY_DATA = {
         "Cohesity FortKnox GovCloud vault storage for secure, air-gapped federal backups",
         "Multi-Party Authorization (MPA) quorum gatekeepers on all administrative changes",
         "Continuous DataHawk ML scanning for malware and indicators of compromise (IOCs)"
+      ],
+      details: [
+        { part: "SC-28 - Protection of Information at Rest", how: "Satisfied via FIPS 140-2 validated encryption modules coupled with customer-managed cryptographic key chains (KMS)." },
+        { part: "CP-9 - Information System Backup (GovCloud)", how: "Satisfied via FortKnox AWS GovCloud cloud storage, creating an isolated, air-gapped backup copy." },
+        { part: "AC-3 - Access Control (Quorum Approval)", how: "Satisfied via Multi-Party Authorization (MPA), enforcing a multi-signature gatekeeper rule on federal records deletion." }
       ]
     },
     soc2: {
@@ -244,6 +276,11 @@ const COHESITY_DATA = {
         "Encrypted, immutable audit logs tracking all recoveries and administrative acts",
         "Immutable WORM DataLock configurations on backup storage pools",
         "Automated vulnerability and threat signature scanning via DataHawk"
+      ],
+      details: [
+        { part: "CC6.1 - Access Control and Authentication", how: "Satisfied via Helios control plane Multi-Factor Authentication (MFA) enforcement across all administrator login pipelines." },
+        { part: "CC6.5 - Audit and Log Integrity", how: "Satisfied via write-once, tamper-proof system audit logs tracking all recoveries and settings modifications." },
+        { part: "CC6.3 - Data Transmission and Immutability", how: "Satisfied via DataLock WORM snapshot enforcement on local backup pools, preventing unauthorized deletion during retention SLAs." }
       ]
     },
     ccpa: {
@@ -253,6 +290,10 @@ const COHESITY_DATA = {
         "Automated encryption for data in transit and storage tiers",
         "Quorum-based Multi-Party approvals (MPA) protecting backups from unauthorized wipeout",
         "Telemetry and system status logging to support compliance readiness audits"
+      ],
+      details: [
+        { part: "Cal. Civ. Code § 1798.105 - Right to Delete", how: "Satisfied via DataHawk automated classification scanning, locating sensitive California consumer records (SSN, credit card, drivers license) inside historical backups." },
+        { part: "Cal. Civ. Code § 1798.100 - General Duty of Security", how: "Satisfied via multi-party quorum approvals (MPA) preventing malicious deletion of databases containing private consumer statistics." }
       ]
     }
   },
