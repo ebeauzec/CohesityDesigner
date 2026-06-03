@@ -41,6 +41,15 @@ class CohesityArchitectWizard {
       deployment: {
         model: "hybrid", // 'onprem', 'saas', 'hybrid'
         nodePreference: "flash" // 'flash', 'hybrid'
+      },
+      pricing: {
+        saasTB: 200,
+        physicalNode: 14500,
+        dataprotectTB: 120,
+        cloudNode: 9800,
+        fortknoxTB: 240,
+        datahawkTB: 90,
+        sitecontinuityFlat: 2400
       }
     };
 
@@ -79,6 +88,60 @@ class CohesityArchitectWizard {
       { port: "443", proto: "TCP (HTTPS)", src: "Cohesity Cluster", dest: "FortKnox Cloud Vault", desc: "Outbound HTTPS SaaS air-gapped sync replication data stream", active: isFortKnoxActive },
       { port: "50051", proto: "TCP", src: "Primary Cluster", dest: "Replication Cluster", desc: "Inter-cluster snapshot synchronization replication data path", active: isReplicationActive }
     ];
+  }
+
+  togglePricingAdjuster() {
+    const inputsDiv = document.getElementById("pricing-adjuster-inputs");
+    const toggleIcon = document.getElementById("pricing-toggle-icon");
+    if (inputsDiv) {
+      const isHidden = inputsDiv.style.display === "none";
+      inputsDiv.style.display = isHidden ? "grid" : "none";
+      if (toggleIcon) {
+        toggleIcon.textContent = isHidden ? "expand_less" : "expand_more";
+      }
+    }
+  }
+
+  renderPricingAdjuster() {
+    if (!this.dom.pricingInputs) return;
+    this.dom.pricingInputs.innerHTML = "";
+
+    const adjusters = [
+      { key: "saasTB", label: "DataProtect SaaS ($/TB/yr)" },
+      { key: "physicalNode", label: "C5000/C6200 Node ($/node/yr)" },
+      { key: "dataprotectTB", label: "DataProtect Soft. ($/TB/yr)" },
+      { key: "cloudNode", label: "Cloud Virtual Node ($/node/yr)" },
+      { key: "fortknoxTB", label: "FortKnox Cloud Vault ($/TB/yr)" },
+      { key: "datahawkTB", label: "DataHawk Scan ($/TB/yr)" },
+      { key: "sitecontinuityFlat", label: "SiteContinuity Flat ($/yr)" }
+    ];
+
+    adjusters.forEach(adj => {
+      const field = document.createElement("div");
+      field.style.cssText = "display: flex; flex-direction: column; gap: 4px;";
+      
+      const label = document.createElement("label");
+      label.className = "form-label";
+      label.style.fontSize = "10px";
+      label.style.marginBottom = "0";
+      label.textContent = adj.label;
+      
+      const input = document.createElement("input");
+      input.type = "number";
+      input.className = "number-override-input";
+      input.style.cssText = "text-align: left; padding: 6px 10px; font-size: 11.5px; border-radius: 6px; background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); color: white; width: 100%; box-sizing: border-box;";
+      input.value = this.state.pricing[adj.key];
+      
+      input.addEventListener("input", (e) => {
+        const val = parseFloat(e.target.value) || 0;
+        this.state.pricing[adj.key] = val;
+        this.updateProposalAndBOM();
+      });
+
+      field.appendChild(label);
+      field.appendChild(input);
+      this.dom.pricingInputs.appendChild(field);
+    });
   }
 
   renderSitesManagerUI() {
@@ -189,7 +252,21 @@ class CohesityArchitectWizard {
     this.bindEvents();
     this.renderSitesManagerUI();
     this.loadWorkloadPresets();
-    this.updateUI();
+    
+    // Download live pricing list
+    fetch('pricing.json')
+      .then(r => r.json())
+      .then(data => {
+        this.state.pricing = { ...this.state.pricing, ...data };
+        console.log("Downloaded live list prices:", this.state.pricing);
+        this.renderPricingAdjuster();
+        this.updateUI();
+      })
+      .catch(err => {
+        console.warn("Failed to download pricing live, using default list:", err);
+        this.renderPricingAdjuster();
+        this.updateUI();
+      });
   }
 
   cacheDomElements() {
@@ -235,6 +312,7 @@ class CohesityArchitectWizard {
     this.dom.proposalRoadmap = document.getElementById("proposal-roadmap-timeline");
     this.dom.proposalComplianceSection = document.getElementById("proposal-compliance-section");
     this.dom.proposalComplianceMapping = document.getElementById("proposal-compliance-mapping");
+    this.dom.pricingInputs = document.getElementById("pricing-adjuster-inputs");
   }
 
   bindEvents() {
@@ -1199,24 +1277,24 @@ class CohesityArchitectWizard {
     
     // Line 1: Primary DataProtect Node or SaaS Capacity
     if (this.state.deployment.model === "saas") {
-      const pricePerTB = 200; // Annual cost per SaaS TB
+      const pricePerTB = this.state.pricing.saasTB; // Annual cost per SaaS TB
       const linePrice = parseFloat(sizing.frontEndTB) * pricePerTB;
       totalAnnualPrice += linePrice;
       tableHTML += `
         <tr style="border-bottom: 1px solid var(--border-color);">
           <td style="padding: 12px; font-weight: 600;">Cohesity DataProtect SaaS License</td>
           <td style="padding: 12px; text-align: center;">${sizing.frontEndTB} TB</td>
-          <td style="padding: 12px; color: var(--text-secondary);">Fully-managed cloud-to-cloud backup subscription ($200 / TB)</td>
+          <td style="padding: 12px; color: var(--text-secondary);">Fully-managed cloud-to-cloud backup subscription ($${pricePerTB.toLocaleString()} / TB)</td>
           <td style="padding: 12px; text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--accent-green);">$${linePrice.toLocaleString()}</td>
         </tr>
       `;
     } else {
       // Hardware Nodes
-      const pricePerNode = 14500; // Annual subscription cost per node (includes support)
+      const pricePerNode = this.state.pricing.physicalNode; // Annual subscription cost per node (includes support)
       const nodeLinePrice = sizing.localNodeCount * pricePerNode;
       
       // DataProtect capacity subscription
-      const pricePerTB = 120; // Annual cost per front-end TB
+      const pricePerTB = this.state.pricing.dataprotectTB; // Annual cost per front-end TB
       const dataProtectPrice = parseFloat(sizing.frontEndTB) * pricePerTB;
       totalAnnualPrice += (nodeLinePrice + dataProtectPrice);
       
@@ -1230,7 +1308,7 @@ class CohesityArchitectWizard {
         <tr style="border-bottom: 1px solid var(--border-color);">
           <td style="padding: 12px; font-weight: 600;">Cohesity DataProtect Software Suite</td>
           <td style="padding: 12px; text-align: center;">${sizing.frontEndTB} TB</td>
-          <td style="padding: 12px; color: var(--text-secondary);">Backup & Instant Recovery software capacity subscription ($120 / Front-End TB)</td>
+          <td style="padding: 12px; color: var(--text-secondary);">Backup & Instant Recovery software capacity subscription ($${pricePerTB.toLocaleString()} / Front-End TB)</td>
           <td style="padding: 12px; text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--accent-green);">$${dataProtectPrice.toLocaleString()}</td>
         </tr>
       `;
@@ -1238,14 +1316,14 @@ class CohesityArchitectWizard {
 
     // Line 2: Cloud Edition Nodes if Cloud Replication Target is active
     if (this.state.bcdr.replication === "cloud-edition") {
-      const cloudNodePrice = 9800; // Cloud Virtual Node sub price
+      const cloudNodePrice = this.state.pricing.cloudNode; // Cloud Virtual Node sub price
       const cloudLinePrice = sizing.cloudNodeCount * cloudNodePrice;
       totalAnnualPrice += cloudLinePrice;
       tableHTML += `
         <tr style="border-bottom: 1px solid var(--border-color);">
           <td style="padding: 12px; font-weight: 600;">Cohesity Cloud Edition IaaS Virtual Nodes</td>
           <td style="padding: 12px; text-align: center;">${sizing.cloudNodeCount} Nodes</td>
-          <td style="padding: 12px; color: var(--text-secondary);">Replication target running in AWS/Azure Virtual private clouds ($9,800 / Node)</td>
+          <td style="padding: 12px; color: var(--text-secondary);">Replication target running in AWS/Azure Virtual private clouds ($${cloudNodePrice.toLocaleString()} / Node)</td>
           <td style="padding: 12px; text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--accent-green);">$${cloudLinePrice.toLocaleString()}</td>
         </tr>
       `;
@@ -1253,14 +1331,14 @@ class CohesityArchitectWizard {
 
     // Line 3: FortKnox Cyber Vault
     if (this.state.security.fortknox) {
-      const pricePerVaultedTB = 240; // Annual cost per vaulted TB (includes cloud storage & egress)
+      const pricePerVaultedTB = this.state.pricing.fortknoxTB; // Annual cost per vaulted TB (includes cloud storage & egress)
       const fkLinePrice = sizing.fortKnoxVaultTB * pricePerVaultedTB;
       totalAnnualPrice += fkLinePrice;
       tableHTML += `
         <tr style="border-bottom: 1px solid var(--border-color);">
           <td style="padding: 12px; font-weight: 600;">Cohesity FortKnox Cloud Cyber Vault</td>
           <td style="padding: 12px; text-align: center;">${sizing.fortKnoxVaultTB} TB</td>
-          <td style="padding: 12px; color: var(--text-secondary);">Isolated cloud vaulting with virtual air-gap and multi-party quorum control</td>
+          <td style="padding: 12px; color: var(--text-secondary);">Isolated cloud vaulting with virtual air-gap and multi-party quorum control ($${pricePerVaultedTB.toLocaleString()} / TB)</td>
           <td style="padding: 12px; text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--accent-green);">$${fkLinePrice.toLocaleString()}</td>
         </tr>
       `;
@@ -1268,14 +1346,14 @@ class CohesityArchitectWizard {
 
     // Line 4: DataHawk Security
     if (this.state.security.datahawk) {
-      const datahawkPricePerTB = 90; // Annual cost per TB
+      const datahawkPricePerTB = this.state.pricing.datahawkTB; // Annual cost per TB
       const dhLinePrice = parseFloat(sizing.frontEndTB) * datahawkPricePerTB;
       totalAnnualPrice += dhLinePrice;
       tableHTML += `
         <tr style="border-bottom: 1px solid var(--border-color);">
           <td style="padding: 12px; font-weight: 600;">Cohesity DataHawk Threat Scan / Classify</td>
           <td style="padding: 12px; text-align: center;">${sizing.frontEndTB} TB</td>
-          <td style="padding: 12px; color: var(--text-secondary);">AI threat analysis, Yara-rule malware engine, and sensitive data discovery scanner</td>
+          <td style="padding: 12px; color: var(--text-secondary);">AI threat analysis, Yara-rule malware engine, and sensitive data discovery scanner ($${datahawkPricePerTB.toLocaleString()} / TB)</td>
           <td style="padding: 12px; text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--accent-green);">$${dhLinePrice.toLocaleString()}</td>
         </tr>
       `;
@@ -1283,13 +1361,13 @@ class CohesityArchitectWizard {
 
     // Line 5: SiteContinuity Disaster Recovery
     if (this.state.bcdr.siteContinuity && this.state.bcdr.replication !== "none") {
-      const siteContPrice = 2400; // Flat base annual orchestrator sub
+      const siteContPrice = this.state.pricing.sitecontinuityFlat; // Flat base annual orchestrator sub
       totalAnnualPrice += siteContPrice;
       tableHTML += `
         <tr style="border-bottom: 1px solid var(--border-color);">
           <td style="padding: 12px; font-weight: 600;">Cohesity SiteContinuity DR Orchestrator</td>
           <td style="padding: 12px; text-align: center;">Active</td>
-          <td style="padding: 12px; color: var(--text-secondary);">Disaster recovery playbook sequencing, network mapping, and failover/failback scripting</td>
+          <td style="padding: 12px; color: var(--text-secondary);">Disaster recovery playbook sequencing, network mapping, and failover/failback scripting ($${siteContPrice.toLocaleString()} / yr flat)</td>
           <td style="padding: 12px; text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--accent-green);">$${siteContPrice.toLocaleString()}</td>
         </tr>
       `;
@@ -1452,34 +1530,35 @@ Estimated Annual Subscription Details:
 
     let totalAnnualPrice = 0;
     if (this.state.deployment.model === "saas") {
-      const linePrice = parseFloat(sizing.frontEndTB) * 200;
+      const pricePerTB = this.state.pricing.saasTB;
+      const linePrice = parseFloat(sizing.frontEndTB) * pricePerTB;
       totalAnnualPrice += linePrice;
-      text += `- Cohesity DataProtect SaaS subscription: $${linePrice.toLocaleString()}/yr\n`;
+      text += `- Cohesity DataProtect SaaS subscription: $${linePrice.toLocaleString()}/yr ($${pricePerTB.toLocaleString()} / TB)\n`;
     } else {
-      const nodePrice = sizing.localNodeCount * 14500;
-      const protectPrice = parseFloat(sizing.frontEndTB) * 120;
+      const nodePrice = sizing.localNodeCount * this.state.pricing.physicalNode;
+      const protectPrice = parseFloat(sizing.frontEndTB) * this.state.pricing.dataprotectTB;
       totalAnnualPrice += (nodePrice + protectPrice);
       text += `- Cohesity physical nodes (${sizing.nodeModelName}): $${nodePrice.toLocaleString()}/yr\n`;
-      text += `- Cohesity DataProtect capacity license: $${protectPrice.toLocaleString()}/yr\n`;
+      text += `- Cohesity DataProtect capacity license: $${protectPrice.toLocaleString()}/yr ($${this.state.pricing.dataprotectTB.toLocaleString()} / Front-End TB)\n`;
     }
 
     if (this.state.bcdr.replication === "cloud-edition") {
-      const cloudPrice = sizing.cloudNodeCount * 9800;
+      const cloudPrice = sizing.cloudNodeCount * this.state.pricing.cloudNode;
       totalAnnualPrice += cloudPrice;
-      text += `- Cohesity Cloud Edition virtual nodes: $${cloudPrice.toLocaleString()}/yr\n`;
+      text += `- Cohesity Cloud Edition virtual nodes: $${cloudPrice.toLocaleString()}/yr ($${this.state.pricing.cloudNode.toLocaleString()} / Node)\n`;
     }
     if (this.state.security.fortknox) {
-      const fkPrice = sizing.fortKnoxVaultTB * 240;
+      const fkPrice = sizing.fortKnoxVaultTB * this.state.pricing.fortknoxTB;
       totalAnnualPrice += fkPrice;
-      text += `- Cohesity FortKnox Cyber Vault capacity: $${fkPrice.toLocaleString()}/yr\n`;
+      text += `- Cohesity FortKnox Cyber Vault capacity: $${fkPrice.toLocaleString()}/yr ($${this.state.pricing.fortknoxTB.toLocaleString()} / TB)\n`;
     }
     if (this.state.security.datahawk) {
-      const dhPrice = parseFloat(sizing.frontEndTB) * 90;
+      const dhPrice = parseFloat(sizing.frontEndTB) * this.state.pricing.datahawkTB;
       totalAnnualPrice += dhPrice;
-      text += `- Cohesity DataHawk ML scan & classification: $${dhPrice.toLocaleString()}/yr\n`;
+      text += `- Cohesity DataHawk ML scan & classification: $${dhPrice.toLocaleString()}/yr ($${this.state.pricing.datahawkTB.toLocaleString()} / TB)\n`;
     }
     if (this.state.bcdr.siteContinuity && this.state.bcdr.replication !== "none") {
-      const scPrice = 2400;
+      const scPrice = this.state.pricing.sitecontinuityFlat;
       totalAnnualPrice += scPrice;
       text += `- Cohesity SiteContinuity DR flat subscription: $${scPrice.toLocaleString()}/yr\n`;
     }
@@ -2021,6 +2100,99 @@ Security checks log:
       `;
     }
 
+    let totalAnnualPrice = 0;
+    let printedBOMRows = "";
+
+    if (this.state.deployment.model === "saas") {
+      const pricePerTB = this.state.pricing.saasTB;
+      const linePrice = parseFloat(sizing.frontEndTB) * pricePerTB;
+      totalAnnualPrice += linePrice;
+      printedBOMRows += `
+        <tr>
+          <td><strong>Cohesity DataProtect SaaS License</strong></td>
+          <td>${sizing.frontEndTB} TB</td>
+          <td>Fully-managed cloud-to-cloud backup subscription ($${pricePerTB.toLocaleString()} / TB)</td>
+          <td style="text-align: right; font-weight: bold; color: #1e7e34;">$${linePrice.toLocaleString()}</td>
+        </tr>
+      `;
+    } else {
+      const pricePerNode = this.state.pricing.physicalNode;
+      const nodeLinePrice = sizing.localNodeCount * pricePerNode;
+      const pricePerTB = this.state.pricing.dataprotectTB;
+      const dataProtectPrice = parseFloat(sizing.frontEndTB) * pricePerTB;
+      totalAnnualPrice += (nodeLinePrice + dataProtectPrice);
+      
+      printedBOMRows += `
+        <tr>
+          <td><strong>Cohesity ${sizing.nodeModelName} Nodes</strong></td>
+          <td>${sizing.localNodeCount} Nodes</td>
+          <td>Physical hyperconverged storage nodes (hardware subscription)</td>
+          <td style="text-align: right; font-weight: bold; color: #1e7e34;">$${nodeLinePrice.toLocaleString()}</td>
+        </tr>
+        <tr>
+          <td><strong>Cohesity DataProtect Software Suite</strong></td>
+          <td>${sizing.frontEndTB} TB</td>
+          <td>Backup & Instant Recovery software capacity subscription ($${pricePerTB.toLocaleString()} / Front-End TB)</td>
+          <td style="text-align: right; font-weight: bold; color: #1e7e34;">$${dataProtectPrice.toLocaleString()}</td>
+        </tr>
+      `;
+    }
+
+    if (this.state.bcdr.replication === "cloud-edition") {
+      const cloudNodePrice = this.state.pricing.cloudNode;
+      const cloudLinePrice = sizing.cloudNodeCount * cloudNodePrice;
+      totalAnnualPrice += cloudLinePrice;
+      printedBOMRows += `
+        <tr>
+          <td><strong>Cohesity Cloud Edition IaaS Virtual Nodes</strong></td>
+          <td>${sizing.cloudNodeCount} Nodes</td>
+          <td>Replication target running in AWS/Azure Cloud ($${cloudNodePrice.toLocaleString()} / Node)</td>
+          <td style="text-align: right; font-weight: bold; color: #1e7e34;">$${cloudLinePrice.toLocaleString()}</td>
+        </tr>
+      `;
+    }
+
+    if (this.state.security.fortknox) {
+      const pricePerVaultedTB = this.state.pricing.fortknoxTB;
+      const fkLinePrice = sizing.fortKnoxVaultTB * pricePerVaultedTB;
+      totalAnnualPrice += fkLinePrice;
+      printedBOMRows += `
+        <tr>
+          <td><strong>Cohesity FortKnox Cloud Cyber Vault</strong></td>
+          <td>${sizing.fortKnoxVaultTB} TB</td>
+          <td>Isolated cloud vaulting with virtual air-gap ($${pricePerVaultedTB.toLocaleString()} / TB)</td>
+          <td style="text-align: right; font-weight: bold; color: #1e7e34;">$${fkLinePrice.toLocaleString()}</td>
+        </tr>
+      `;
+    }
+
+    if (this.state.security.datahawk) {
+      const datahawkPricePerTB = this.state.pricing.datahawkTB;
+      const dhLinePrice = parseFloat(sizing.frontEndTB) * datahawkPricePerTB;
+      totalAnnualPrice += dhLinePrice;
+      printedBOMRows += `
+        <tr>
+          <td><strong>Cohesity DataHawk Threat Scan / Classify</strong></td>
+          <td>${sizing.frontEndTB} TB</td>
+          <td>AI threat scanning & sensitive data discovery ($${datahawkPricePerTB.toLocaleString()} / TB)</td>
+          <td style="text-align: right; font-weight: bold; color: #1e7e34;">$${dhLinePrice.toLocaleString()}</td>
+        </tr>
+      `;
+    }
+
+    if (this.state.bcdr.siteContinuity && this.state.bcdr.replication !== "none") {
+      const siteContPrice = this.state.pricing.sitecontinuityFlat;
+      totalAnnualPrice += siteContPrice;
+      printedBOMRows += `
+        <tr>
+          <td><strong>Cohesity SiteContinuity DR Orchestrator</strong></td>
+          <td>Active</td>
+          <td>Disaster recovery playbook sequencing flat subscription ($${siteContPrice.toLocaleString()} / yr flat)</td>
+          <td style="text-align: right; font-weight: bold; color: #1e7e34;">$${siteContPrice.toLocaleString()}</td>
+        </tr>
+      `;
+    }
+
     const printWrapper = document.getElementById("printable-report-wrapper");
     printWrapper.innerHTML = `
       <div class="print-page">
@@ -2040,69 +2212,42 @@ Security checks log:
           <p>This technical architecture proposal outlines the deployment parameters of a Cohesity DataCloud resilient storage cluster. The design consolidates protection across <strong>${this.state.sites.length} site(s)</strong> (${this.state.sites.map(s => s.name).join(", ")}). Sized to meet a front-end workload footprint of <strong>${sizing.frontEndTB} TB</strong>, the system consolidates backup datasets into an integrated, secure scale-out pool reducing storage overhead through deduplication and compression.</p>
           
           <div class="print-bom-summary">
-            <div class="print-bom-col">
+            <div class="print-bom-col" style="width: 22%;">
               <h3>Front-End Data</h3>
               <div class="print-bom-val">${sizing.frontEndTB} TB</div>
             </div>
-            <div class="print-bom-col">
+            <div class="print-bom-col" style="width: 22%;">
               <h3>Sized Usable Storage</h3>
               <div class="print-bom-val" style="color:var(--accent-blue)">${sizing.usableLocalTB} TB</div>
             </div>
-            <div class="print-bom-col">
+            <div class="print-bom-col" style="width: 22%;">
               <h3>Cyber Resiliency Score</h3>
               <div class="print-bom-val" style="color:#ff9900">${compliance.score}/100</div>
+            </div>
+            <div class="print-bom-col" style="width: 22%;">
+              <h3>Est. Annual Cost</h3>
+              <div class="print-bom-val" style="color:#00d68f">$${totalAnnualPrice.toLocaleString()}</div>
             </div>
           </div>
         </div>
 
         <div class="print-section">
-          <h2>2. Recommended Hardware Configuration (BOM)</h2>
+          <h2>2. Recommended Solution Sizing & Subscription Cost (BOM)</h2>
           <table class="print-table">
             <thead>
               <tr>
                 <th>Component / License</th>
                 <th>Quantity</th>
                 <th>Sizing / Model Details</th>
-                <th>Architectural Purpose</th>
+                <th style="text-align: right;">Est. Annual Subscription</th>
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td><strong>Cohesity Nodes</strong></td>
-                <td>${sizing.localNodeCount > 0 ? `${sizing.localNodeCount}x Nodes` : 'SaaS'}</td>
-                <td>${sizing.nodeRecommendation}</td>
-                <td>Primary backup ingestion, storage deduplication, and instant restores</td>
+              ${printedBOMRows}
+              <tr style="font-weight: bold; background: rgba(0, 214, 143, 0.08); border-top: 1.5px solid #1e7e34;">
+                <td colspan="3" style="padding: 8px 6px; font-size: 10pt;">Estimated Total Cohesity Subscription (Annual Rate)</td>
+                <td style="padding: 8px 6px; text-align: right; font-size: 10.5pt; color: #1e7e34;">$${totalAnnualPrice.toLocaleString()}</td>
               </tr>
-              <tr>
-                <td><strong>Cohesity DataProtect Subscription</strong></td>
-                <td>${sizing.frontEndTB} TB</td>
-                <td>Front-End Capacity Licensing</td>
-                <td>Agentless backup & rapid mass restore licenses for active workloads</td>
-              </tr>
-              ${this.state.security.fortknox ? `
-                <tr>
-                  <td><strong>Cohesity FortKnox Vault License</strong></td>
-                  <td>${sizing.fortKnoxVaultTB} TB</td>
-                  <td>SaaS-managed Cloud Vaulting (AWS Cold Storage)</td>
-                  <td>Virtual air-gapped immutable copy providing protection against ransomware root-deletion</td>
-                </tr>
-              ` : ''}
-              ${this.state.security.datahawk ? `
-                <tr>
-                  <td><strong>Cohesity DataHawk Subscription</strong></td>
-                  <td>${sizing.frontEndTB} TB</td>
-                  <td>AI Threat Detection & Classification</td>
-                  <td>ML anomaly identification, Yara signature malware scans, and sensitive data PII indexing</td>
-                </tr>
-              ` : ''}
-              ${this.state.bcdr.siteContinuity ? `
-                <tr>
-                  <td><strong>Cohesity SiteContinuity License</strong></td>
-                  <td>Active</td>
-                  <td>Disaster Recovery Orchestrator</td>
-                  <td>Automates multi-tier app failover workflows and sandbox compliance reporting</td>
-                </tr>
-              ` : ''}
             </tbody>
           </table>
         </div>

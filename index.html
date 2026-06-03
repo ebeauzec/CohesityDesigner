@@ -641,6 +641,21 @@
               </p>
             </div>
 
+            <!-- Pricing Adjustment Card -->
+            <div class="glass-card" style="background:rgba(255,255,255,0.02); padding:20px; border-radius:12px; border:1px solid var(--border-color);">
+              <h3 style="font-size:14px; color:var(--accent-blue); margin:0; display:flex; align-items:center; justify-content:space-between; cursor:pointer;" onclick="app.togglePricingAdjuster()">
+                <span style="display:flex; align-items:center; gap:8px;">
+                  <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">payments</span>
+                  Adjust Solution Subscription Pricing (Live List)
+                </span>
+                <span id="pricing-toggle-icon" class="material-symbols-outlined" style="font-size:18px;">expand_more</span>
+              </h3>
+              
+              <div id="pricing-adjuster-inputs" style="display:none; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:16px; border-top:1px solid rgba(255,255,255,0.05); padding-top:12px; margin-top:10px;">
+                <!-- Inputs will be dynamically injected here -->
+              </div>
+            </div>
+
             <!-- Bill of Materials (BOM) Table -->
             <div>
               <h3 style="font-size:15px; margin-bottom:12px; display:flex; align-items:center; gap:8px;">

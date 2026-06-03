@@ -1,0 +1,9 @@
+{
+  "saasTB": 200,
+  "physicalNode": 14500,
+  "dataprotectTB": 120,
+  "cloudNode": 9800,
+  "fortknoxTB": 240,
+  "datahawkTB": 90,
+  "sitecontinuityFlat": 2400
+}
