@@ -58,6 +58,29 @@ class CohesityArchitectWizard {
     return this.state.sites.find(s => s.id === this.state.activeSiteId) || this.state.sites[0];
   }
 
+  getNetworkPorts() {
+    const isVmActive = this.state.sites.some(site => site.workloads.vm.active);
+    const isDbActive = this.state.sites.some(site => site.workloads.database.active);
+    const isFilesActive = this.state.sites.some(site => site.workloads.files.active);
+    const isSaasActive = this.state.sites.some(site => site.workloads.saas.active);
+    const isK8sActive = this.state.sites.some(site => site.workloads.k8s.active);
+    
+    const isReplicationActive = this.state.bcdr.replication !== "none";
+    const isFortKnoxActive = this.state.security.fortknox;
+
+    return [
+      { port: "443", proto: "TCP (HTTPS)", src: "vCenter Server", dest: "Cohesity Cluster", desc: "VMware registration and vCenter SDK control session calls", active: isVmActive },
+      { port: "902", proto: "TCP", src: "ESXi Hosts", dest: "Cohesity Cluster", desc: "VMware backup raw NBD data path stream ingestion", active: isVmActive },
+      { port: "50051", proto: "TCP", src: "Physical Servers", dest: "Cohesity Cluster", desc: "Cohesity Backup Agent control and data block channel", active: isDbActive || isK8sActive },
+      { port: "1433", proto: "TCP", src: "Cohesity Cluster", dest: "SQL Instances", desc: "SQL Server database backup metadata enumeration queries", active: isDbActive },
+      { port: "445", proto: "TCP", src: "SMB File Shares", dest: "Cohesity Cluster", desc: "NAS / SmartFiles SMB protocol protection backup reads", active: isFilesActive },
+      { port: "111 / 2049", proto: "TCP", src: "NFS File Shares", dest: "Cohesity Cluster", desc: "NAS / SmartFiles NFS protocol protection backup mount reads", active: isFilesActive },
+      { port: "443", proto: "TCP (HTTPS)", src: "Cohesity Cluster", dest: "Helios Cloud Portal", desc: "Outbound management telemetry, remote alerts & Helios API", active: true },
+      { port: "443", proto: "TCP (HTTPS)", src: "Cohesity Cluster", dest: "FortKnox Cloud Vault", desc: "Outbound HTTPS SaaS air-gapped sync replication data stream", active: isFortKnoxActive },
+      { port: "50051", proto: "TCP", src: "Primary Cluster", dest: "Replication Cluster", desc: "Inter-cluster snapshot synchronization replication data path", active: isReplicationActive }
+    ];
+  }
+
   renderSitesManagerUI() {
     const container = document.getElementById("sites-tabs-container");
     if (!container) return;
@@ -979,6 +1002,52 @@ class CohesityArchitectWizard {
   }
 
   updateIntegrationCode(tabId) {
+    if (tabId === "firewall") {
+      document.getElementById("code-title").textContent = "Enterprise Firewall & TCP Port Requirements";
+      document.getElementById("code-desc").textContent = "Port mapping rules required for network routing and security group configurations between protected elements.";
+
+      const ports = this.getNetworkPorts();
+      const isFortKnoxActive = this.state.security.fortknox;
+      const isReplicationActive = this.state.bcdr.replication !== "none";
+
+      const colWidths = [12, 12, 20, 20, 60, 10];
+      const headers = ["Port", "Protocol", "Source Component", "Destination Comp.", "Architectural Purpose / Description", "Status"];
+      
+      const formatRow = (cols) => {
+        return "│ " + cols.map((c, i) => String(c).padEnd(colWidths[i])).join(" │ ") + " │\n";
+      };
+
+      const makeBorder = (left, sepChar, right) => {
+        return left + colWidths.map(w => "─".repeat(w + 2)).join(sepChar) + right + "\n";
+      };
+
+      let table = "";
+      table += makeBorder("┌", "┬", "┐");
+      table += formatRow(headers);
+      table += makeBorder("├", "┼", "┤");
+      ports.forEach(p => {
+        table += formatRow([p.port, p.proto, p.src, p.dest, p.desc, p.active ? "ACTIVE" : "INACTIVE"]);
+      });
+      table += makeBorder("└", "┴", "┘");
+
+      this.dom.codePre.textContent = table;
+
+      if (this.dom.playbookGuide) {
+        let guideHTML = `
+          <h4 style="font-size:12.5px; color:var(--accent-green); margin:0 0 6px 0; border-bottom:1px solid var(--border-color); padding-bottom:6px;">Firewall Policy Guide</h4>
+          <p style="margin:0 0 8px 0; font-size:11px; line-height:1.4; color:var(--text-secondary);">Configure firewall rules to match the parameters below. Inactive rows represent ports not required in your current setup.</p>
+          <ul style="padding-left:14px; margin:0; display:flex; flex-direction:column; gap:6px; font-size:11px; color:var(--text-secondary);">
+            <li><strong>Zone Protection:</strong> Place local Cohesity nodes inside a protected administrative VLAN.</li>
+            <li><strong>Outbound Telemetry:</strong> Keep port TCP 443 outbound open to <code>*.cohesity.com</code> for Helios cloud monitoring.</li>
+            ${isFortKnoxActive ? '<li><strong>Air-Gapped Vaulting:</strong> Outbound TCP 443 routes are required to Amazon Web Services endpoints for FortKnox SaaS data transfers.</li>' : ''}
+            ${isReplicationActive ? '<li><strong>Replication Paths:</strong> Configure bidirectional routing for port TCP 50051 between the VIP pools of primary and remote disaster recovery clusters.</li>' : ''}
+          </ul>
+        `;
+        this.dom.playbookGuide.innerHTML = guideHTML;
+      }
+      return;
+    }
+
     const snippet = COHESITY_DATA.integrationSnippets[tabId];
     if (snippet) {
       document.getElementById("code-title").textContent = snippet.title;
@@ -1468,6 +1537,14 @@ Security checks log:
       });
     }
  
+    // 6. Network Firewall & TCP Port Routing Table
+    text += `\n6. NETWORK FIREWALL & TCP PORT ROUTING TABLE\n`;
+    text += `--------------------------------------------\n`;
+    const portsList = this.getNetworkPorts();
+    portsList.forEach(p => {
+      text += `- Port: ${p.port.padEnd(10)} | Proto: ${p.proto.padEnd(11)} | Src: ${p.src.padEnd(18)} -> Dest: ${p.dest.padEnd(18)} | Purpose: ${p.desc} | Status: [${p.active ? 'ACTIVE' : 'INACTIVE'}]\n`;
+    });
+
     navigator.clipboard.writeText(text);
     
     // Visual button feedback
@@ -1554,6 +1631,16 @@ Security checks log:
       const siteDedupeMbps = Math.ceil(siteIngestDedupeMbps);
       const siteDedupeMBs = (siteDedupeMbps / 8).toFixed(1).replace(/\.0$/, "");
 
+      let activeWlsText = [];
+      Object.keys(site.workloads).forEach(wlKey => {
+        const wl = site.workloads[wlKey];
+        if (wl.active) {
+          const label = wlKey === "vm" ? "VMs" : wlKey === "database" ? "DBs" : wlKey === "files" ? "Files" : wlKey === "saas" ? "SaaS" : "K8s";
+          activeWlsText.push(`${label}: ${wl.capacityTB}TB`);
+        }
+      });
+      const workloadsDetail = activeWlsText.length > 0 ? activeWlsText.join(", ") : "No workloads";
+
       svgContent += `
         <!-- Site Link to Cluster -->
         <path d="M 170 ${yPos} Q 250 ${yPos}, 330 190" fill="none" stroke="var(--accent-blue)" stroke-opacity="0.3" stroke-width="2" />
@@ -1563,8 +1650,9 @@ Security checks log:
         <g class="svg-hotspot" cursor="pointer" onclick="app.showHotspot('site-${site.id}')">
           <circle cx="100" cy="${yPos}" r="22" fill="#121a2f" stroke="var(--accent-blue)" stroke-width="1.5" />
           <text x="100" y="${yPos + 5}" font-family="Material Symbols Outlined" font-size="16" fill="var(--accent-blue)" text-anchor="middle">corporate_fare</text>
-          <text x="135" y="${yPos - 2}" font-family="Inter" font-size="11" font-weight="700" fill="white">${site.name.toUpperCase()}</text>
-          <text x="135" y="${yPos + 10}" font-size="9" font-family="JetBrains Mono" fill="var(--text-secondary)">${siteCapacityTB} TB (~${siteDedupeMbps} Mbps / ${siteDedupeMBs} MB/s)</text>
+          <text x="135" y="${yPos - 4}" font-family="Inter" font-size="11" font-weight="700" fill="white">${site.name.toUpperCase()}</text>
+          <text x="135" y="${yPos + 7}" font-size="9" font-family="JetBrains Mono" fill="var(--text-secondary)">${siteCapacityTB} TB (~${siteDedupeMbps} Mbps / ${siteDedupeMBs} MB/s)</text>
+          <text x="135" y="${yPos + 17}" font-family="Inter" font-size="8.5" fill="var(--accent-blue)" font-weight="500">${workloadsDetail}</text>
         </g>
       `;
     });
@@ -2098,6 +2186,35 @@ Security checks log:
             <strong>Phase 3: Security & SIEM Connection</strong><br>
             Configure API webhooks connecting Cohesity DataHawk threat anomaly feeds into enterprise SIEM (Splunk, Microsoft Sentinel) for immediate security operations alerting.
           </div>
+        </div>
+
+        <div class="print-section" style="page-break-inside: avoid;">
+          <h2>6. Network Firewall & TCP Port Routing Table</h2>
+          <p>The following ports must be enabled in the firewall policy to support connectivity between local, remote, and cloud SaaS elements:</p>
+          <table class="print-table" style="font-size: 8.5pt;">
+            <thead>
+              <tr style="background:#fafafa;">
+                <th style="padding: 6px;">Port</th>
+                <th style="padding: 6px;">Protocol</th>
+                <th style="padding: 6px;">Source Component</th>
+                <th style="padding: 6px;">Destination</th>
+                <th style="padding: 6px;">Purpose / Description</th>
+                <th style="padding: 6px;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${this.getNetworkPorts().map(p => `
+                <tr style="border-bottom: 1px solid #eee;">
+                  <td style="padding: 6px;"><strong>${p.port}</strong></td>
+                  <td style="padding: 6px;">${p.proto}</td>
+                  <td style="padding: 6px;">${p.src}</td>
+                  <td style="padding: 6px;">${p.dest}</td>
+                  <td style="padding: 6px;">${p.desc}</td>
+                  <td style="padding: 6px;"><span style="font-weight:bold; color:${p.active ? '#1e7e34' : '#888'}">${p.active ? 'ACTIVE' : 'INACTIVE'}</span></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
         </div>
       </div>
       ${printComplianceHTML}
