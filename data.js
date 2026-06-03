@@ -185,6 +185,10 @@ const COHESITY_DATA = {
   complianceFrameworks: {
     gdpr: {
       name: "GDPR Compliance",
+      links: [
+        { text: "EUR-Lex Official GDPR Journal (EU 2016/679)", url: "https://eur-lex.europa.eu/eli/reg/2016/679/oj" },
+        { text: "Cohesity Data Protection & GDPR Compliance Solution", url: "https://www.cohesity.com/solutions/compliance/gdpr/" }
+      ],
       requirements: [
         "Data Encryption at Rest & In Transit",
         "WORM Storage (DataLock) to prevent alteration of compliance records",
@@ -199,6 +203,10 @@ const COHESITY_DATA = {
     },
     hipaa: {
       name: "HIPAA Security Rule",
+      links: [
+        { text: "HHS Health Information Privacy Security Rule Guideline", url: "https://www.hhs.gov/hipaa/for-professionals/security/laws-regulations/index.html" },
+        { text: "Cohesity Healthcare Compliance & HIPAA Solution Brief", url: "https://www.cohesity.com/solutions/industry/healthcare/" }
+      ],
       requirements: [
         "Unique user access credentials and strict audit logging of restores",
         "Automated encryption key rotation (KMS integration)",
@@ -214,6 +222,10 @@ const COHESITY_DATA = {
     },
     pcidss: {
       name: "PCI-DSS v4.0 Requirements",
+      links: [
+        { text: "PCI Security Standards Council Portal", url: "https://www.pcisecuritystandards.org/" },
+        { text: "Cohesity Financial Services Security Compliance Guide", url: "https://www.cohesity.com/solutions/compliance/" }
+      ],
       requirements: [
         "Encrypted backup vaults restricting cardholder data environment",
         "Quorum-based Multi-Party Authorization (MPA) for target deletion",
@@ -229,6 +241,10 @@ const COHESITY_DATA = {
     },
     nis2: {
       name: "NIS2 Directives (Cyber Resilience)",
+      links: [
+        { text: "EU Official NIS2 Directive (EU 2022/2555) Text", url: "https://eur-lex.europa.eu/eli/dir/2022/2555/oj" },
+        { text: "Cohesity NIS2 Compliance Strategy Solution", url: "https://www.cohesity.com/solutions/compliance/nis2/" }
+      ],
       requirements: [
         "Proactive threat detection & file behavior analytics (DataHawk)",
         "Automated recovery playbooks and DR testing sandbox (SiteContinuity)",
@@ -243,6 +259,10 @@ const COHESITY_DATA = {
     },
     dora: {
       name: "DORA Compliance",
+      links: [
+        { text: "EU Official DORA Regulation (EU 2022/2554) Text", url: "https://eur-lex.europa.eu/eli/reg/2022/2554/oj" },
+        { text: "Cohesity Digital Operational Resilience Act (DORA) Solutions", url: "https://www.cohesity.com/solutions/compliance/dora/" }
+      ],
       requirements: [
         "SiteContinuity DR orchestration for automated digital operational resilience testing",
         "Continuous Data Protection (CDP) journaling for near-zero data loss SLAs",
@@ -257,6 +277,10 @@ const COHESITY_DATA = {
     },
     fedramp: {
       name: "FedRAMP Hardening",
+      links: [
+        { text: "FedRAMP Official Marketplace & Governance Portal", url: "https://www.fedramp.gov/" },
+        { text: "Cohesity Federal Government Data Protection Trust", url: "https://www.cohesity.com/solutions/industry/government/" }
+      ],
       requirements: [
         "FIPS 140-2 certified data-at-rest encryption using external KMS key chains",
         "Cohesity FortKnox GovCloud vault storage for secure, air-gapped federal backups",
@@ -271,6 +295,10 @@ const COHESITY_DATA = {
     },
     soc2: {
       name: "SOC 2 Type II Auditing",
+      links: [
+        { text: "AICPA Trust Services Criteria (SOC 2 Guide)", url: "https://www.aicpa-cima.com/resources/toolkit/soc-suite-of-services" },
+        { text: "Cohesity Trust Center & Security Compliance", url: "https://www.cohesity.com/trust-center/" }
+      ],
       requirements: [
         "Helios control plane Multi-Factor Authentication (MFA) enforcement",
         "Encrypted, immutable audit logs tracking all recoveries and administrative acts",
@@ -285,6 +313,10 @@ const COHESITY_DATA = {
     },
     ccpa: {
       name: "CCPA / CPRA Privacy",
+      links: [
+        { text: "California Privacy Protection Agency (CPPA) CCPA Rule", url: "https://cppa.ca.gov/" },
+        { text: "Cohesity Privacy & Regulatory Governance Portal", url: "https://www.cohesity.com/solutions/compliance/" }
+      ],
       requirements: [
         "Cohesity DataHawk data classification queries to map California consumer PI",
         "Automated encryption for data in transit and storage tiers",

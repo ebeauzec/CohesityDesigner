@@ -1456,6 +1456,23 @@ class CohesityArchitectWizard {
                 `;
               });
             }
+
+            if (framework.links && framework.links.length > 0) {
+              complianceHTML += `
+                <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.08); display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+                  <span style="font-size: 10.5px; color: var(--text-secondary); font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                    <span class="material-symbols-outlined" style="font-size:14px;">link</span> References:
+                  </span>
+              `;
+              framework.links.forEach(lnk => {
+                complianceHTML += `
+                  <a href="${lnk.url}" target="_blank" style="font-size: 10.5px; color: var(--accent-blue); text-decoration: none; display: inline-flex; align-items: center; gap: 2px; transition: color 0.2s;" onmouseover="this.style.color='#00bcff'" onmouseout="this.style.color='var(--accent-blue)'">
+                    ${lnk.text} <span class="material-symbols-outlined" style="font-size: 11px;">open_in_new</span>
+                  </a>
+                `;
+              });
+              complianceHTML += `</div>`;
+            }
             
             complianceHTML += `
                 </div>
@@ -1610,6 +1627,12 @@ Security checks log:
           } else {
             framework.requirements.forEach(req => {
               text += `- ${req}\n`;
+            });
+          }
+          if (framework.links && framework.links.length > 0) {
+            text += `References & Solution Briefs:\n`;
+            framework.links.forEach(lnk => {
+              text += `- ${lnk.text}: ${lnk.url}\n`;
             });
           }
         }
@@ -2095,6 +2118,53 @@ Security checks log:
       });
 
       printComplianceHTML += `
+          </div>
+        </div>
+        
+        <div class="print-page" style="page-break-before: always;">
+          <div class="print-header">
+            <h1 style="font-size: 20pt; margin: 0; color: #111;">Cohesity Solution Design (Cont.)</h1>
+            <p style="font-size: 9pt; color: #666; margin: 4px 0 0 0;">Project: ${this.state.project.name} | GRC Appendices</p>
+          </div>
+          <div class="print-section">
+            <h2>Appendix A: Governance, Risk & Compliance Reference Bibliography</h2>
+            <p>This appendix compiles official documentation, regulatory guidelines, and Cohesity compliance briefs related to the security posture of the sized configuration:</p>
+            <div style="margin-top: 15px;">
+      `;
+
+      activeComplianceKeys.forEach(key => {
+        const framework = COHESITY_DATA.complianceFrameworks[key];
+        if (framework && framework.links && framework.links.length > 0) {
+          printComplianceHTML += `
+            <div style="margin-top: 14px; border: 1px solid #ddd; padding: 10px; border-radius: 6px; page-break-inside: avoid;">
+              <h3 style="font-size: 10pt; color: #0056b3; margin: 0 0 6px 0; border-bottom: 1.5px solid #eee; padding-bottom: 4px; font-weight: 700;">${framework.name} References</h3>
+              <table style="width: 100%; border-collapse: collapse; font-size: 8.5pt; text-align: left;">
+                <thead>
+                  <tr style="border-bottom: 1px solid #ccc; font-weight: bold; background: #fafafa;">
+                    <th style="padding: 6px 4px; width: 45%;">Resource Title</th>
+                    <th style="padding: 6px 4px;">Official Verification Link</th>
+                  </tr>
+                </thead>
+                <tbody>
+          `;
+          framework.links.forEach(lnk => {
+            printComplianceHTML += `
+              <tr style="border-bottom: 1px solid #eee;">
+                <td style="padding: 6px 4px; font-weight: bold; color: #333; vertical-align: top;">${lnk.text}</td>
+                <td style="padding: 6px 4px; vertical-align: top;"><a href="${lnk.url}" target="_blank" style="color: #0056b3; text-decoration: underline; font-family: monospace; font-size: 7.5pt; word-break: break-all;">${lnk.url}</a></td>
+              </tr>
+            `;
+          });
+          printComplianceHTML += `
+                </tbody>
+              </table>
+            </div>
+          `;
+        }
+      });
+
+      printComplianceHTML += `
+            </div>
           </div>
         </div>
       `;
