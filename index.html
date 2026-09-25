@@ -6,7 +6,7 @@
   <title>Cohesity Solution Architect Wizard</title>
   
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="style.css?v=14">
+  <link rel="stylesheet" href="style.css?v=16">
   
   <!-- Google Material Symbols (Icons) -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
@@ -30,6 +30,13 @@
         <span class="brand-badge">Sales Engineering Edition</span>
       </div>
       <div class="header-actions">
+        <input type="file" id="load-scenario-input" accept="application/json" style="display:none;">
+        <button id="btn-load-scenario" class="btn btn-secondary" title="Load a previously saved scenario JSON file">
+          <span class="material-symbols-outlined" style="font-size: 18px;">upload_file</span> Load Scenario
+        </button>
+        <button id="btn-save-scenario" class="btn btn-secondary" title="Save the current scenario as a JSON file you can reopen or share">
+          <span class="material-symbols-outlined" style="font-size: 18px;">save</span> Save Scenario
+        </button>
         <button id="btn-print" class="btn btn-secondary">
           <span class="material-symbols-outlined" style="font-size: 18px;">print</span> Export SE Proposal
         </button>
@@ -512,14 +519,14 @@
           <div class="toggle-card">
             <div class="toggle-info">
               <span class="toggle-title">
-                <span class="material-symbols-outlined" style="color:var(--accent-purple)">troubleshoot</span> Cohesity DataHawk ML Guard
-                <span class="toggle-title-badge badge-security">AI Security</span>
+                <span class="material-symbols-outlined" style="color:var(--accent-purple)">troubleshoot</span> Threat Defense & Data Classification
+                <span class="toggle-title-badge badge-security">Enterprise Edition</span>
                 <span class="tooltip-container">
                   <span class="material-symbols-outlined tooltip-icon">info</span>
-                  <span class="tooltip-text">Uses machine learning to detect anomalous behavior (like sudden file encryption entropy) and scans backups for malware and sensitive PII.</span>
+                  <span class="tooltip-text">Machine-learning anomaly detection (e.g. sudden file-encryption entropy), threat hunting, and sensitive-data classification. Formerly the standalone DataHawk add-on; now bundled into Cohesity Data Cloud Enterprise Edition. Toggling this switches the BOM's pricing model between Core and Enterprise Edition.</span>
                 </span>
               </span>
-              <span class="toggle-desc">Leverages AI for continuous malware threat detection and sensitive PII classification scans.</span>
+              <span class="toggle-desc">Leverages AI for continuous malware threat detection and sensitive PII classification scans (Enterprise Edition).</span>
             </div>
             <label class="switch">
               <input type="checkbox" id="chk-datahawk" checked>
@@ -680,6 +687,11 @@
               </div>
             </div>
 
+            <!-- Consolidation Value / TCO Estimate -->
+            <div id="proposal-tco-section" class="glass-card" style="background:rgba(255,255,255,0.02); padding:20px; border-radius:12px; border:1px solid var(--border-color);">
+              <!-- Generated dynamically by renderTCO() -->
+            </div>
+
             <!-- Data Governance & Regulatory Compliance Mapping -->
             <div id="proposal-compliance-section" class="glass-card" style="background:rgba(255,255,255,0.02); padding:20px; border-radius:12px; border:1px solid var(--border-color); display: none;">
               <h3 style="font-size:15px; color:var(--accent-orange); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
@@ -687,6 +699,18 @@
                 Regulatory Compliance & Data Governance Mapping
               </h3>
               <div id="proposal-compliance-mapping" style="display:flex; flex-direction:column; gap:16px;">
+                <!-- Generated dynamically -->
+              </div>
+            </div>
+
+            <!-- Competitive Positioning -->
+            <div class="glass-card" style="background:rgba(255,255,255,0.02); padding:20px; border-radius:12px; border:1px solid var(--border-color);">
+              <h3 style="font-size:15px; color:var(--accent-blue); margin-bottom:4px; display:flex; align-items:center; gap:8px;">
+                <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">balance</span>
+                Competitive Positioning Notes
+              </h3>
+              <p style="font-size:10.5px; color:var(--text-muted); margin:0 0 8px 0;">SE talking points, not independently verified competitor claims — validate against the current battlecard before customer use.</p>
+              <div id="proposal-competitive-section">
                 <!-- Generated dynamically -->
               </div>
             </div>
@@ -703,11 +727,14 @@
             </div>
             
             <!-- Actions -->
-            <div style="display:flex; gap:16px; margin-top:10px;">
-              <button id="btn-copy-proposal" class="btn btn-secondary" style="flex:1; justify-content:center; padding:12px;">
+            <div style="display:flex; gap:16px; margin-top:10px; flex-wrap:wrap;">
+              <button id="btn-copy-proposal" class="btn btn-secondary" style="flex:1; min-width:200px; justify-content:center; padding:12px;">
                 <span class="material-symbols-outlined" style="font-size:18px;">content_copy</span> Copy Proposal Text
               </button>
-              <button id="btn-export-pdf" class="btn btn-primary" style="flex:1; justify-content:center; padding:12px;">
+              <button id="btn-as-built" class="btn btn-secondary" style="flex:1; min-width:200px; justify-content:center; padding:12px;" title="Download a technical configuration record for implementation handover, distinct from the customer-facing proposal">
+                <span class="material-symbols-outlined" style="font-size:18px;">fact_check</span> Download As-Built Doc
+              </button>
+              <button id="btn-export-pdf" class="btn btn-primary" style="flex:1; min-width:200px; justify-content:center; padding:12px;">
                 <span class="material-symbols-outlined" style="font-size:18px;">picture_as_pdf</span> Download Proposal PDF
               </button>
             </div>
@@ -754,6 +781,11 @@
               Calculating recommended hardware...
             </div>
             <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Calculated using variable-length dedupe ratios + GFS retention margins.</div>
+            <div style="display:flex; align-items:center; gap:6px; margin-top:8px;">
+              <span class="material-symbols-outlined" style="font-size:14px; color:var(--accent-blue);">workspace_premium</span>
+              <span id="rec-edition-badge" style="font-size:11px; font-weight:600; color:var(--accent-blue);">Enterprise Edition</span>
+            </div>
+            <div id="rec-growth-plan" style="font-size:10.5px; color:var(--text-secondary); margin-top:4px; line-height:1.4;"></div>
           </div>
 
           <div style="display:flex; justify-content:space-between; border-top:1px solid var(--border-color); padding-top:12px; font-size:11px;">
@@ -861,7 +893,12 @@
             <span class="material-symbols-outlined" style="color:var(--accent-green)">hub</span>
             Interactive Architectural Topology Diagram
           </h3>
-          <span style="font-size:11px; color:var(--text-secondary)">Click nodes inside the diagram to display configuration details</span>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:11px; color:var(--text-secondary)">Click nodes inside the diagram to display configuration details</span>
+            <button id="btn-download-svg" class="btn btn-secondary" style="padding:5px 10px; font-size:11px;" title="Download this diagram as a standalone SVG file">
+              <span class="material-symbols-outlined" style="font-size:15px;">download</span> SVG
+            </button>
+          </div>
         </div>
         
         <div class="topology-canvas">
@@ -926,7 +963,7 @@
   </div>
 
   <!-- Javascript Logic Files -->
-  <script src="data.js?v=15"></script>
-  <script src="app.js?v=15"></script>
+  <script src="data.js?v=16"></script>
+  <script src="app.js?v=16"></script>
 </body>
 </html>

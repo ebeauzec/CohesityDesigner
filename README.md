@@ -1,6 +1,6 @@
 # Cohesity Architect Toolkit
 
-[![Version](https://img.shields.io/badge/version-2.0.0-0066cc)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-3.0.0-0066cc)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Proprietary-red)](LICENSE)
 [![Runtime](https://img.shields.io/badge/runtime-HTML%2FJS%2C%20no%20build-3776AB)]()
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)]()
@@ -75,18 +75,23 @@ In one pass through the six-step wizard, the tool produces a complete, internall
 
 **Computed from your inputs:**
 - Front-end and usable-TB sizing per workload, compounded over a 3-year growth forecast and adjusted for GFS retention overhead
-- A recommended node count and hardware family, sized N+1 against the selected performance tier's real usable capacity
+- A recommended node count and hardware family, sized **N+1** against Cohesity's real resiliency model — **RF2 (~50% usable) below 6 nodes, Erasure Coding (~80% usable) at 6+**, with an 80% operational-utilization headroom target, and a throughput check that bumps node count when aggregate ingest bandwidth (not just capacity) demands it
+- A **phased-expansion checkpoint** — a Year-1 node count alongside the full 3-year figure, so a deal doesn't have to be sized (or priced) for growth that hasn't happened yet
 - Daily backup change volume, raw and deduplicated ingest bandwidth, replication bandwidth, and FortKnox vault sync bandwidth — each tied to its own workload's backup window
 - A 0–100 Cyber Resilience Index scoring immutability, MFA/MPA, vaulting, and malware scanning, with the specific gaps that are dragging the score down
-- A Bill of Materials with per-line and total annual pricing, driven by an editable rate table
-- An interactive topology diagram reflecting your actual site count, replication mode, and security posture
+- An **edition-aware Bill of Materials** (Core vs. Enterprise Edition) with per-line and total annual pricing, driven by an editable rate table
+- A **Consolidation Value / TCO estimate** translating the blended dedupe/compression ratio into an illustrative avoided-storage-cost figure
+- An interactive topology diagram reflecting your actual site count, replication mode, and security posture — exportable standalone as SVG
 
 **Reference content built in:**
-- Six Cohesity product profiles (DataProtect, Alta, FortKnox, DataHawk, SmartFiles, SiteContinuity, Gaia) with taglines, feature lists, and licensing models
+- Six Cohesity product profiles (DataProtect, Alta, FortKnox, Threat Defense/Enterprise Edition, SmartFiles, SiteContinuity, Gaia) with taglines, feature lists, and licensing models
 - Three physical hardware families (CX8000 all-flash, C6200 hybrid, C5200 entry/ROBO) with real current-generation SKU ranges
 - Eight compliance frameworks with clause-level architecture mappings and official reference links
 - Four integration playbooks (Splunk SIEM, ServiceNow REST, SiteContinuity DR runbook YAML, Ansible bootstrap) with values auto-substituted from your project
-- A dynamic firewall/TCP port reference, filtered to what your configuration actually requires
+- A dynamic firewall/TCP port reference, filtered to what your configuration actually requires, plus **cluster-internal network prerequisites** (IPMI, node VIPs, L2/LACP/jumbo frames) that a port table alone doesn't cover
+- **Competitive positioning notes** (vs. Veeam, Rubrik, Commvault, legacy NetBackup estates) and a downloadable **As-Built/handover document** capturing the exact configuration a proposal was sized against
+
+**Save your work:** the full scenario (every input across all six steps) can be exported to a JSON file and reloaded later — from the header's **Save Scenario** / **Load Scenario** buttons. Nothing persists automatically; this is the explicit save/share mechanism.
 
 ---
 
@@ -137,7 +142,7 @@ In one pass through the six-step wizard, the tool produces a complete, internall
 **Goal:** Show a customer exactly what their current posture scores, and what closes the gap.
 
 **Workflow:**
-1. Go to **Security** and toggle FortKnox, DataHawk, MFA, MPA, and KMS to match (or propose) the customer's posture
+1. Go to **Security** and toggle FortKnox, Threat Defense & Data Classification, MFA, MPA, and KMS to match (or propose) the customer's posture
 2. The sidebar's **Cyber Resilience Index** updates live (0–100) with a color-coded rating
 3. Go to **Proposal** → the print/PDF export includes a **Resiliency Gap Analysis** listing exactly which controls are off and what they cost the score
 
@@ -189,9 +194,9 @@ cd CohesityDesigner
 
 Open the served URL and step through **Project → Workloads → Resilience → Security → Deploy → Proposal**. Every field updates the sidebar's Sizing Calculation Summary, Estimated Network Bandwidth, and Cyber Resilience Index live — you don't need to reach the Proposal step to see the numbers change.
 
-### Step 4 — Export
+### Step 4 — Save Your Work / Export
 
-From the **Proposal** step: **Copy Proposal Text** puts a full plain-text version on your clipboard; **Download Proposal PDF** (or the header's **Export SE Proposal** button) opens the browser's print dialog against a dedicated print layout — save as PDF from there.
+Nothing auto-saves. From the **header**: **Save Scenario** downloads the entire wizard state as a JSON file; **Load Scenario** reopens one later (yours or a colleague's) and re-populates every field. From the **Proposal** step: **Copy Proposal Text** puts a full plain-text version on your clipboard; **Download As-Built Doc** exports a technical configuration record for implementation handover; **Download Proposal PDF** (or the header's **Export SE Proposal** button) opens the browser's print dialog against a dedicated print layout — save as PDF from there.
 
 ---
 
@@ -223,10 +228,10 @@ Target RPO/RTO selection, replication mode (none / second site / Cloud Edition /
 
 ### Step 4 — Security
 
-FortKnox cyber vaulting, DataHawk ML threat scanning, Helios MFA, Quorum MPA, and the encryption KMS selector (Cohesity-managed vs. customer-managed). Every toggle here feeds the Cyber Resilience Index and the Hardening Checklist in the sidebar in real time.
+FortKnox cyber vaulting, Threat Defense & Data Classification (which also switches the BOM between Core and Enterprise Edition pricing — see [Section 7](#7-bill-of-materials--pricing)), Helios MFA, Quorum MPA, and the encryption KMS selector (Cohesity-managed vs. customer-managed). Every toggle here feeds the Cyber Resilience Index and the Hardening Checklist in the sidebar in real time.
 
 <p align="center">
-  <img src="docs/images/04-security-hardening.png" alt="Security step showing FortKnox and DataHawk toggles enabled, MFA and MPA switches on, and the KMS selector set to customer-managed" width="820">
+  <img src="docs/images/04-security-hardening.png" alt="Security step showing FortKnox and Threat Defense & Data Classification toggles enabled, MFA and MPA switches on, and the KMS selector set to customer-managed" width="820">
 </p>
 
 ### Step 5 — Deploy
@@ -234,31 +239,39 @@ FortKnox cyber vaulting, DataHawk ML threat scanning, Helios MFA, Quorum MPA, an
 Deployment model (on-prem / SaaS / hybrid) and the physical hardware class preference — **Performance All-Flash NVMe (CX8000 Class)**, **Capacity Standard Hybrid (C6200 Class)**, or **Entry-Level / ROBO Hybrid (C5200 Class)**. Database-heavy workloads (over 35% of front-end footprint) automatically upgrade to the all-flash tier regardless of this selection, since that's what Cohesity would actually recommend for that mix.
 
 <p align="center">
-  <img src="docs/images/05-deploy-hardware.png" alt="Deploy step showing the Hybrid Cloud Model deployment scenario selected and all three physical hardware tiers — CX8000, C6200, and C5200 — with CX8000 currently selected and the sidebar recommending 10 nodes" width="820">
+  <img src="docs/images/05-deploy-hardware.png" alt="Deploy step showing the Hybrid Cloud Model deployment scenario selected and all three physical hardware tiers — CX8000, C6200, and C5200 — with CX8000 selected and the sidebar recommending 10 nodes using Erasure Coding, an Enterprise Edition badge, and a phased growth plan" width="820">
 </p>
 
 ### Step 6 — Proposal
 
-The complete output: an auto-generated executive summary, an editable pricing panel, a full Bill of Materials with line-item and total annual pricing, the regulatory compliance mapping for every framework checked in Step 1, a four-phase deployment roadmap, and the export actions.
+The complete output: an auto-generated executive summary, an editable pricing panel, a full Bill of Materials with line-item and total annual pricing, a Consolidation Value/TCO estimate, the regulatory compliance mapping for every framework checked in Step 1, competitive positioning notes, a four-phase deployment roadmap, and the export actions (proposal text, PDF, and As-Built handover document).
 
 <p align="center">
-  <img src="docs/images/07-proposal-bom.png" alt="Proposal step's Bill of Materials table showing CX8000 nodes, DataProtect software, FortKnox vault, DataHawk scanning, and SiteContinuity line items totaling an estimated annual subscription" width="820">
+  <img src="docs/images/07-proposal-bom.png" alt="Proposal step's Bill of Materials table showing CX8000 nodes, DataProtect software, FortKnox vault, Enterprise Edition uplift, and SiteContinuity line items totaling an estimated annual subscription" width="820">
+</p>
+
+<p align="center">
+  <img src="docs/images/11-tco-estimate.png" alt="Consolidation Value & TCO Estimate card showing a 1.8:1 blended dedupe/compression reduction, 202.7 TB of legacy primary storage capacity avoided, and an estimated avoided storage cost of $121,632" width="820">
 </p>
 
 <p align="center">
   <img src="docs/images/08-compliance-mapping.png" alt="Proposal step's Regulatory Compliance & Data Governance Mapping section showing GDPR Article-level requirements mapped to specific Cohesity capabilities with official reference links" width="820">
 </p>
 
+<p align="center">
+  <img src="docs/images/12-competitive-positioning.png" alt="Competitive Positioning Notes section with SE talking points versus Veeam, Rubrik, Commvault, and legacy Veritas NetBackup estates, alongside the sidebar's Recommended Cohesity Suite showing Threat Defense & Data Classification as an active Enterprise Edition feature" width="820">
+</p>
+
 ### Persistent: Topology Diagram & Integration Playbooks
 
-Below the wizard on every step: an interactive SVG topology diagram (click any node for detail) and a tabbed panel of integration snippets — Splunk, ServiceNow, SiteContinuity runbook YAML, Ansible, and a dynamic firewall/port table.
+Below the wizard on every step: an interactive SVG topology diagram (click any node for detail, or use the **SVG** button to export it standalone) and a tabbed panel of integration snippets — Splunk, ServiceNow, SiteContinuity runbook YAML, Ansible, and a dynamic firewall/port table.
 
 <p align="center">
   <img src="docs/images/09-topology-diagram.png" alt="Interactive Architectural Topology Diagram showing two sites feeding a Cohesity cluster of 10 nodes, which replicates to a FortKnox SaaS vault and a secondary node, with live bandwidth badges on each connection" width="820">
 </p>
 
 <p align="center">
-  <img src="docs/images/10-firewall-ports.png" alt="Enterprise Integration Snippets panel showing the Splunk SIEM Webhook tab with a sample JSON payload and a deployment guide explaining where to configure it in Cohesity Helios" width="820">
+  <img src="docs/images/10-firewall-ports.png" alt="Firewall / TCP Ports tab showing the dynamic port table plus the new Cluster-Internal Network Prerequisites list (IPMI, node VIPs, L2, LACP, jumbo frames) in the deployment guide sidebar" width="820">
 </p>
 
 ---
@@ -291,15 +304,35 @@ Total usable TB is the sum across every active workload on every configured site
 
 ### Node Hardware Reference
 
-Node counts are computed N+1 (sized to lose one node without falling below the required usable capacity), floored at each hardware family's real minimum cluster size:
+| Family | Representative SKU | Tier | Raw Capacity/Node | Min Nodes | Est. Throughput/Node | Real SKU Range |
+|---|---|---|---|---|---|---|
+| **CX8000 Series** | CX8305 | All-Flash Performance | 46.08 TB | 4 (sold in blocks) | ~800 MB/s | CX8205 (23.04TB) / CX8305 (46.08TB) / CX8405 (92.16TB) raw NVMe |
+| **C6200 Series** | C6216S | Hybrid Standard | 204.8 TB | 3 | ~500 MB/s | C6208S (96TB) / C6216S (192TB) / C6224 (288TB) raw HDD + 6.4–12.8TB PCIe flash |
+| **C5200 Series** | C5224 | Entry-Level Hybrid | 75.2 TB | 3 | ~300 MB/s | C5204 through C5224 (12–72TB raw HDD) + 1.6–3.2TB PCIe flash |
 
-| Family | Representative SKU | Tier | Usable Capacity (est.) | Min Nodes | Real SKU Range |
-|---|---|---|---|---|---|
-| **CX8000 Series** | CX8305 | All-Flash Performance | 32 TB/node | 4 (sold in blocks) | CX8205 (23.04TB) / CX8305 (46.08TB) / CX8405 (92.16TB) raw NVMe |
-| **C6200 Series** | C6216S | Hybrid Standard | 133 TB/node | 3 | C6208S (96TB) / C6216S (192TB) / C6224 (288TB) raw HDD + 6.4–12.8TB PCIe flash |
-| **C5200 Series** | C5224 | Entry-Level Hybrid | 49 TB/node | 3 | C5204 through C5224 (12–72TB raw HDD) + 1.6–3.2TB PCIe flash |
+> Raw capacities are per Cohesity's public datasheets. Throughput figures are SE planning estimates, not a published per-node spec — used only to flag when a configuration is throughput-bound. Each family ships multiple capacity points; the wizard sizes against one representative mid-tier SKU per family. **Always confirm the exact SKU, usable capacity, and throughput with Cohesity or a Cohesity partner before quoting** — see `data.js`'s `nodeTypes.physical` for the full source data.
 
-> Usable-capacity figures are SE planning estimates (~65–70% of raw, after erasure-coding overhead) — Cohesity does not publish an official raw-to-usable ratio. Each family ships multiple capacity points; the wizard sizes against one representative mid-tier SKU per family so it can compute a single node count. **Always confirm the exact SKU and usable capacity with Cohesity or a Cohesity partner before quoting** — see `data.js`'s `nodeTypes.physical` for the full source data and the `skuRange` note on each entry.
+#### Resiliency model: RF2 vs. Erasure Coding
+
+Usable capacity is **not** a flat ratio of raw — it depends on cluster size, per Cohesity's own Fault Tolerance white paper:
+
+| Mode | When | Usable Ratio |
+|---|---|---|
+| **RF2** (Replication Factor 2) | Below 6 nodes | ~50% of raw |
+| **Erasure Coding (EC)** | 6+ nodes | ~80% of raw |
+
+`sizeNodesForCapacity()` in `app.js` iterates candidate node counts, switching ratio automatically at the 6-node threshold, and stops once the cluster **minus one node** (N+1) still covers the requirement — so the resiliency mode, not just the node count, can change based on how much capacity is needed.
+
+```
+target = neededUsableTB / utilizationHeadroom        # headroom = 0.80 (SE guideline, not an official Cohesity number)
+usableRatio = (nodeCount >= 6) ? 0.80 : 0.50           # EC vs RF2
+usablePerNode = capacityRawTB × usableRatio
+# increment nodeCount until: (nodeCount - 1) × usablePerNode >= target
+```
+
+**Throughput check:** after capacity sizing, the required raw ingest rate (from the bandwidth formulas below) is compared against `(nodeCount - 1) × estThroughputMBps`. If capacity-driven sizing wouldn't carry enough ingest bandwidth, node count is bumped further and the recommendation is labeled "sized for ingest throughput" rather than pure capacity.
+
+**Phased expansion:** the same function is also run against a Year-1-only projection (growth compounded to the power of 1, not 3), producing a `year1NodeCount` shown alongside the full 3-year figure whenever they differ — e.g. "Deploy 8 nodes now → grow to 10 within 3 years."
 
 A workload mix where database capacity exceeds 35% of total front-end footprint automatically sizes against the CX8000 (all-flash) tier regardless of the Deploy step's selection, since that's the performance profile Cohesity would actually recommend for a database-heavy estate.
 
@@ -331,7 +364,7 @@ Starts at 100, with fixed deductions for each missing control:
 |---|---|
 | No off-site replication configured | −20 |
 | FortKnox cyber vault not enabled | −25 |
-| DataHawk threat scanning not enabled | −20 |
+| Threat Defense/data classification not enabled (Enterprise Edition) | −20 |
 | Helios MFA not enabled | −15 |
 | Multi-Party Approval (MPA) not enabled | −15 |
 | Cohesity-managed (not customer-managed) KMS | −10 |
@@ -340,11 +373,33 @@ Starts at 100, with fixed deductions for each missing control:
 
 Floored at 10 (never shown as a bare 0 unless no workloads are protected at all). ≥80 is rated "Exemplary Resiliency" (green), ≥50 is "Vulnerable Cyber Defense" (amber), below 50 is "Critical Resiliency Risk" (red).
 
+### Consolidation Value / TCO Estimate
+
+```
+spaceSavedTB = rawUndupedTB - usableLocalTB     # naive undeduplicated equivalent minus what's actually stored
+avoidedCostUSD = spaceSavedTB × primaryStorageCostPerTB
+blendedReduction = rawUndupedTB / usableLocalTB
+```
+
+`rawUndupedTB` is accumulated alongside the usable-capacity calculation in `calculateSizing()` — the same per-workload growth and retention multipliers, just without dividing by the dedupe ratio. `primaryStorageCostPerTB` is an editable illustrative rate (default $600/TB) representing legacy primary-storage cost avoided by consolidating onto Cohesity's global variable-length deduplication. This is explicitly labeled as illustrative in the UI and export — it is not a substitute for a real cost assessment against a customer's actual current spend.
+
+### Cluster-Internal Network Prerequisites
+
+Distinct from the external firewall port table (`getNetworkPorts()`), sourced from Cohesity's "Optimal Network Designs" reference architecture and shown in the Firewall/TCP Ports tab, the print export, and the As-Built document:
+
+| Requirement | Why |
+|---|---|
+| Out-of-band management (IPMI/BMC) IP per node | Hardware-level console access independent of the data path |
+| Node data IP + Cluster VIP per node | One VIP per node for client-facing NFS/SMB/S3 traffic, load-balanced across the cluster |
+| Single Layer-2 network for all cluster nodes | No routed L3 hop between nodes |
+| LACP-aggregated NICs per node | Combined throughput and NIC-level fault tolerance (typically 2× 10/25GbE+) |
+| Jumbo frames (MTU 9000) end-to-end on the cluster-interconnect/replication path | Reduces CPU overhead, improves inter-node replication/rebalancing throughput |
+
 ---
 
 ## 7. Bill of Materials & Pricing
 
-The BOM is generated line-by-line from the same sizing engine described above — physical nodes (or SaaS capacity), DataProtect software, FortKnox vault, DataHawk scanning, SiteContinuity, and (when Cloud Edition replication is selected) cloud virtual nodes.
+The BOM is generated line-by-line from the same sizing engine described above — physical nodes (or SaaS capacity), Core Edition DataProtect software, an Enterprise Edition uplift (when Threat Defense/Data Classification is enabled on the Security step), FortKnox vault, SiteContinuity, and (when Cloud Edition replication is selected) cloud virtual nodes.
 
 > [!IMPORTANT]
 > **The default rates are illustrative planning estimates, not an official Cohesity price list.** They ship in [`pricing.json`](pricing.json) and are clearly labeled "(Editable Estimates)" in the UI. Cohesity does not publish public list pricing — replace every rate with your own negotiated or distributor pricing under **Proposal → Adjust Solution Subscription Pricing** before sharing a proposal externally. Every BOM line and the executive summary total recalculate the instant you change a rate.
@@ -353,11 +408,14 @@ The BOM is generated line-by-line from the same sizing engine described above �
 |---|---|---|
 | `saasTB` | $200 / TB / yr | Cohesity DataProtect SaaS (when Deploy model = SaaS) |
 | `physicalNode` | $14,500 / node / yr | Physical hardware node subscription, any of the three families |
-| `dataprotectTB` | $120 / TB / yr | DataProtect software capacity license |
+| `dataprotectTB` | $120 / TB / yr | Core Edition DataProtect software capacity license |
 | `cloudNode` | $9,800 / node / yr | Cloud Edition IaaS virtual nodes (replication target) |
 | `fortknoxTB` | $240 / TB / yr | FortKnox vaulted capacity |
-| `datahawkTB` | $90 / TB / yr | DataHawk scan/classify capacity |
+| `enterpriseUpliftTB` | $45 / TB / yr | Enterprise Edition uplift over Core (Threat Defense, data classification — see [Section 12](#12-legal--intellectual-property) note on DataHawk) |
 | `sitecontinuityFlat` | $2,400 / yr flat | SiteContinuity DR orchestrator |
+| `primaryStorageCostPerTB` | $600 / TB | Legacy primary-storage cost assumption, used only for the TCO estimate |
+
+> **On the "DataHawk" line disappearing:** earlier versions of this tool billed DataHawk as its own per-TB SKU. As of Cohesity's current Data Cloud packaging, those capabilities (threat detection, classification) ship as part of Enterprise Edition rather than a standalone product — see the `datahawk` entry in `data.js`'s `products` array and [CHANGELOG.md v3.0.0](CHANGELOG.md#300---2026-09-25) for the research behind this change. Confirm current SKU boundaries with your Cohesity account team before quoting, since public packaging pages can lag the live price book.
 
 ---
 
@@ -432,9 +490,9 @@ Browser only — no backend, no build step
 Cohesity/
 ├── docs/
 │   └── images/       ← README screenshots (captured with Playwright against a live instance)
-├── data.js           ← Product catalog, node hardware, workload presets, compliance data (~550 lines)
-├── app.js            ← Application logic and sizing engine (~2,470 lines)
-├── index.html         ← DOM shell for all six steps + sidebar + topology (~930 lines)
+├── data.js           ← Product catalog, node hardware, workload presets, compliance data (~600 lines)
+├── app.js            ← Application logic and sizing engine (~2,900 lines)
+├── index.html         ← DOM shell for all six steps + sidebar + topology (~970 lines)
 ├── style.css           ← Dark-theme CSS (~1,230 lines)
 ├── pricing.json         ← Default rate table
 ├── CHANGELOG.md
@@ -446,9 +504,9 @@ Cohesity/
 
 | File | Size | Role |
 |---|---|---|
-| `app.js` | ~116 KB / ~2,470 lines | The `CohesityArchitectWizard` class: constructor state, DOM caching, event binding, `calculateSizing()`, `calculateBandwidth()`, `calculateComplianceScore()`, the SVG topology renderer, BOM/proposal generators (live HTML, clipboard text, and print HTML — three separate render paths kept in sync), and the pricing adjuster |
-| `data.js` | ~30 KB / ~550 lines | `COHESITY_DATA`: six product profiles, three physical + one virtual + two cloud node hardware types, five workload presets (dedupe ratio, growth, retention), eight compliance frameworks with clause-level detail, five integration snippet templates |
-| `index.html` | ~55 KB / ~930 lines | Static DOM for all six wizard steps (only the active one is visible via a CSS class), the persistent sidebar, and the topology/integration panel that sits below the wizard on every step |
+| `app.js` | ~142 KB / ~2,900 lines | The `CohesityArchitectWizard` class: constructor state, DOM caching, event binding, `calculateSizing()` (with `sizeNodesForCapacity()`'s RF2/EC + headroom + throughput model), `calculateBandwidth()`, `calculateComplianceScore()`, `calculateTCO()`, the SVG topology renderer, BOM/proposal generators (live HTML, clipboard text, and print HTML — three separate render paths kept in sync), save/load scenario, the As-Built document generator, and the pricing adjuster |
+| `data.js` | ~35 KB / ~600 lines | `COHESITY_DATA`: six product profiles, three physical + one virtual + two cloud node hardware types, the RF2/EC resiliency model, cluster-internal network requirements, five workload presets (dedupe ratio, growth, retention), eight compliance frameworks with clause-level detail, five integration snippet templates, competitive positioning notes |
+| `index.html` | ~59 KB / ~970 lines | Static DOM for all six wizard steps (only the active one is visible via a CSS class), the persistent sidebar (now including the edition badge and growth-plan line), and the topology/integration panel that sits below the wizard on every step |
 | `style.css` | ~24 KB / ~1,230 lines | Dark glassmorphism theme, responsive dashboard grid, slider/toggle/radio custom styling |
 | `pricing.json` | ~1 KB | Seven default rate fields, merged into `state.pricing` on load; falls back to `app.js`'s hardcoded defaults if the fetch fails |
 
@@ -479,10 +537,15 @@ Cohesity/
 
 | Function | Returns | Used By |
 |---|---|---|
-| `calculateSizing()` | Front-end/usable TB, node count, node family, FortKnox vault TB | Sidebar, Proposal exec summary, BOM, print export, hotspot detail popovers |
-| `calculateBandwidth()` | Daily change (raw/dedupe), ingest/replication/vault Mbps + MB/s | Sidebar, Step 3, topology diagram badges, Proposal exec summary |
+| `calculateSizing()` | Front-end/usable TB, node count, node family, resiliency mode, Year-1 node count, FortKnox vault TB | Sidebar, Proposal exec summary, BOM, print export, hotspot detail popovers |
+| `sizeNodesForCapacity(nodeType, neededUsableTB)` | Node count + resiliency mode (RF2/EC) + deployed usable TB for one hardware family at one target capacity | `calculateSizing()` (called twice: full 3-year target, then the Year-1 checkpoint) |
+| `calculateBandwidth()` | Daily change (raw/dedupe), ingest/replication/vault Mbps + MB/s | Sidebar, Step 3, topology diagram badges, Proposal exec summary, `calculateSizing()`'s throughput check |
 | `calculateComplianceScore()` | 0–100 score + a deduction reason list | Sidebar resilience ring, print export's Resiliency Gap Analysis |
-| `getNetworkPorts()` | Array of port rules with an `active` flag per current config | Firewall integration tab, print export |
+| `calculateTCO()` | Space saved (TB), avoided cost ($), blended reduction ratio | Proposal TCO card, clipboard text, print export |
+| `getNetworkPorts()` | Array of port rules with an `active` flag per current config | Firewall integration tab, print export, As-Built document |
+| `exportScenario()` / `importScenario(json)` | Downloads/restores the full wizard state as JSON | Header Save/Load Scenario buttons |
+| `generateAsBuiltDocument()` | Full technical configuration record as plain text | "Download As-Built Doc" button |
+| `downloadTopologySVG()` | Serializes the live `<svg>` and downloads it | Topology diagram's "SVG" button |
 
 ### Cache-Busting Convention
 

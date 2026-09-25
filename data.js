@@ -53,16 +53,17 @@ const COHESITY_DATA = {
     },
     {
       id: "datahawk",
-      name: "Cohesity DataHawk",
-      tagline: "AI-Powered Data Security and Scanning",
-      description: "Combines ML-driven threat detection, cyber vault scanning, and automated data classification. Helps detect active attacks, identifies sensitive data, and ensures malware-free recovery.",
+      name: "Threat Defense & Data Classification",
+      tagline: "Bundled into Cohesity Data Cloud Enterprise Edition",
+      description: "AI/ML-driven ransomware anomaly detection, threat hunting/containment, and automated sensitive-data classification. Formerly sold as the standalone Cohesity DataHawk add-on; as of Cohesity's current Data Cloud packaging (verified against cohesity.com/buy/cohesity-data-cloud-packaging/), these capabilities ship as part of Enterprise Edition rather than a separate per-TB SKU. Public packaging pages can lag the live price book — confirm current SKU boundaries with your Cohesity account team before quoting.",
       features: [
         "Continuous machine learning threat detection on backup streams",
-        "Integrated antivirus and Yara-rule scanning for malware signatures",
-        "Data classification for automated sensitive data discovery (PII, PCI, HIPAA)",
-        "Clean recovery dashboard showing compromised vs. clean snapshots"
+        "Ransomware anomaly detection, threat hunting, and threat containment",
+        "Sensitive data classification and monitoring (PII, PCI, HIPAA)",
+        "Clean recovery dashboard showing compromised vs. clean snapshots",
+        "Digital Jump Bag™ incident response toolkit and CERT incident response service (Enterprise Edition)"
       ],
-      licensing: "Per TB Protected Capacity Subscription"
+      licensing: "Included in Cohesity Data Cloud Enterprise Edition (not sold as a standalone SKU in current packaging)"
     },
     {
       id: "smartfiles",
@@ -106,19 +107,48 @@ const COHESITY_DATA = {
     }
   ],
 
+  // Resiliency model: Cohesity's SpanFS supports RF2 (Replication Factor 2) and Erasure
+  // Coding (EC). Per Cohesity's Fault Tolerance white paper, RF2 yields ~50% usable capacity
+  // and is used below the EC node threshold; EC yields up to ~80% usable capacity and is
+  // adopted once a cluster reaches 6+ nodes. app.js computes usable capacity dynamically from
+  // capacityRawTB using this model (not a flat ratio) - see sizeNodesForCapacity() in app.js.
+  resiliencyModel: {
+    rf2: { maxNodesForRf2: 5, usableRatio: 0.50, name: "Replication Factor 2 (RF2)" },
+    erasureCoding: { minNodes: 6, usableRatio: 0.80, name: "Erasure Coding (EC)" },
+    // SE planning guidance (not an official published Cohesity threshold): avoid sizing a
+    // cluster to run above this fraction of its usable capacity in steady state.
+    utilizationHeadroom: 0.80
+  },
+
+  // Cluster-internal network prerequisites (distinct from the external firewall port table in
+  // getNetworkPorts()/app.js). Source: Cohesity's "Optimal Network Designs with Cohesity"
+  // reference architecture guide.
+  clusterNetworkRequirements: [
+    { item: "Out-of-band management (IPMI/BMC) IP per node", detail: "One dedicated IPMI IP per physical node, on a separate management network, for hardware-level console access independent of the data path." },
+    { item: "Node data IP + Cluster VIP per node", detail: "Each node needs its own data-network IP; Cohesity best practice also assigns one Virtual IP (VIP) per node for client-facing NFS/SMB/S3 traffic, load-balanced across the cluster." },
+    { item: "Single Layer-2 network for all cluster nodes", detail: "All nodes in a cluster must sit on one L2 broadcast domain — no routed L3 hop between nodes." },
+    { item: "LACP-aggregated NICs per node", detail: "Node network interfaces should be LACP-bonded (typically 2x 10/25GbE or better) for combined throughput and NIC-level fault tolerance." },
+    { item: "Jumbo frames (MTU 9000) end-to-end on the cluster-interconnect/replication path", detail: "Reduces CPU overhead and improves throughput for inter-node replication, rebalancing, and auto-healing traffic." }
+  ],
+
   nodeTypes: {
-    // Usable capacities are SE planning estimates (~65-70% of raw, after erasure coding
-    // overhead) - Cohesity does not publish official raw-to-usable ratios. Each family ships
-    // multiple SKUs at different capacity points; one representative mid-tier SKU is used
-    // per family below so the wizard can size against a single number. Always confirm exact
-    // SKU and usable capacity with the Cohesity sizing tool / SE team before quoting.
+    // capacityUsableTB below is a reference figure only (at minNodes, RF2 ratio) - the sizing
+    // engine in app.js computes actual usable capacity dynamically per cluster size using
+    // resiliencyModel above (RF2 below 6 nodes, EC at 6+), driven off capacityRawTB.
+    // estThroughputMBps is an SE planning estimate (not a published per-node spec) used only
+    // to flag when a configuration is throughput-bound rather than capacity-bound.
+    // Each family ships multiple SKUs at different capacity points; one representative
+    // mid-tier SKU is used per family so the wizard can size against a single number. Always
+    // confirm exact SKU, usable capacity, and throughput with Cohesity or a Cohesity partner
+    // before quoting.
     physical: [
       {
         id: "cx8000",
         model: "CX8000 Series (CX8305)",
         tier: "All-Flash Performance",
         capacityRawTB: 46.08,
-        capacityUsableTB: 32,
+        capacityUsableTB: 23, // reference only: 46.08 x 0.50 (RF2) at minNodes
+        estThroughputMBps: 800,
         media: "All-NVMe (6 NVMe drives/node)",
         bestFor: "Fastest recovery SLAs, dev/test spin-up, database-heavy environments (SQL, Oracle, SAP HANA), demanding app ecosystems",
         minNodes: 4, // sold in 4-node blocks
@@ -129,7 +159,8 @@ const COHESITY_DATA = {
         model: "C6200 Series (C6216S)",
         tier: "Hybrid Standard",
         capacityRawTB: 204.8,
-        capacityUsableTB: 133,
+        capacityUsableTB: 102, // reference only: 204.8 x 0.50 (RF2) at minNodes
+        estThroughputMBps: 500,
         media: "HDD capacity tier + PCIe NVMe flash cache",
         bestFor: "Standard enterprise backups, backup target consolidation, file and object use cases",
         minNodes: 3,
@@ -140,7 +171,8 @@ const COHESITY_DATA = {
         model: "C5200 Series (C5224)",
         tier: "Entry-Level Hybrid",
         capacityRawTB: 75.2,
-        capacityUsableTB: 49,
+        capacityUsableTB: 38, // reference only: 75.2 x 0.50 (RF2) at minNodes
+        estThroughputMBps: 300,
         media: "HDD capacity tier + PCIe flash cache",
         bestFor: "Smaller enterprise sites, ROBO/edge consolidation, test/dev, budget-constrained deployments",
         minNodes: 3,
@@ -546,5 +578,26 @@ Save as a playbook file on your <strong>Ansible Controller Node</strong> or load
 4. Run the playbook in your terminal: <code>ansible-playbook cohesity_bootstrap.yml --ask-vault-pass</code>.<br>
 5. Verify on Helios that the domain shows as registered and the immutable policy is active.`
     }
-  }
+  },
+
+  // Factual differentiators only - no unverifiable claims about a named competitor's specific
+  // shortcomings. Intended as SE talking points for a competitive-displacement conversation.
+  competitivePositioning: [
+    {
+      vendor: "Veeam",
+      angle: "Backup, immutable cyber vaulting (FortKnox), and AI-driven threat detection/classification ship as one scale-out platform and a single support relationship, rather than a backup product paired with separately licensed and integrated immutability and security tooling."
+    },
+    {
+      vendor: "Rubrik",
+      angle: "SpanFS's variable-length global deduplication spans the whole cluster (not per-node), and the same Cohesity Data Cloud platform natively extends to SmartFiles unstructured data and Gaia-powered conversational search over backup data without a separate product."
+    },
+    {
+      vendor: "Commvault",
+      angle: "Agentless protection across hypervisors, databases, and physical systems on a hyperconverged scale-out architecture, avoiding the agent-sprawl and separate media-server tiering common in legacy backup-software deployments."
+    },
+    {
+      vendor: "Legacy Veritas NetBackup (pre-combination estates)",
+      angle: "Cohesity's completed combination with Veritas (Dec 2024) gives existing NetBackup customers a supported path onto a modern, API-first, scale-out architecture and the Cohesity Alta SaaS control plane, without requiring an immediate rip-and-replace migration."
+    }
+  ]
 };

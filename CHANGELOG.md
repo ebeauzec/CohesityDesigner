@@ -4,6 +4,31 @@ All notable changes to the Cohesity Architect Toolkit are documented here.
 
 ---
 
+## [3.0.0] - 2026-09-25
+
+**Architecture & deliverables pass.** A follow-up gap analysis against Cohesity's actual products and published best practices turned up a real pricing accuracy problem and several sizing/deliverable gaps. This release closes them.
+
+### Fixed (accuracy)
+- **DataHawk was being billed as a standalone per-TB SKU it may no longer be.** Checked Cohesity's current packaging directly (cohesity.com/buy/cohesity-data-cloud-packaging/): Cohesity Data Cloud now ships as **Core** and **Enterprise** Editions, and DataHawk isn't named in that packaging — its capabilities (threat detection, classification, ransomware anomaly detection) appear bundled into Enterprise Edition. The BOM's "DataHawk Threat Scan/Classify" line item is replaced with a "Data Cloud Enterprise Edition Uplift" line, and the Security step's toggle now drives a real `deployment.edition` (Core/Enterprise) state shown as a badge in the sidebar.
+- **Usable capacity ignored cluster size entirely.** Per Cohesity's Fault Tolerance white paper, RF2 (below 6 nodes) yields ~50% usable capacity; Erasure Coding (6+ nodes) yields up to ~80%. The sizing engine previously applied one flat ratio regardless of node count. `sizeNodesForCapacity()` now computes usable capacity dynamically per candidate node count, switching resiliency mode automatically at the 6-node EC threshold, and the sidebar/BOM/proposal show which mode was used.
+- **No utilization headroom.** The engine sized clusters to exactly 100% of the calculated requirement. Now targets 80% utilization in steady state (an SE planning guideline, not an official published Cohesity number — labeled as such throughout).
+- **Capacity-only sizing ignored throughput.** Added a per-node-family throughput estimate (`estThroughputMBps`, an SE planning figure) and a check that bumps node count when aggregate required ingest bandwidth would exceed it — the recommendation now notes when it's throughput-bound rather than capacity-bound.
+
+### Added (architecture)
+- **Cluster-internal network prerequisites** (IPMI/BMC per node, node VIP, single L2 domain, LACP bonding, jumbo frames) — sourced from Cohesity's "Optimal Network Designs" reference architecture, distinct from the external firewall port table. Surfaced in the Firewall/TCP Ports tab, the print export, and the As-Built document.
+- **Phased-expansion / growth-plan checkpoint** — the sizing engine now also computes a Year-1 node count alongside the full 3-year figure, and the sidebar/executive summary surface both ("Deploy N nodes now → grow to M within 3 years") when they differ.
+- **Save / Load Scenario** — the entire wizard state can be exported to a JSON file and reloaded later (or shared with a colleague), via new header buttons. Closes the biggest standing UX gap: there was previously no way to persist work between sessions.
+
+### Added (deliverables)
+- **Consolidation Value & TCO Estimate** — a new Proposal-step card (and export section) translating the blended dedupe/compression ratio into an illustrative avoided-storage-cost figure, using an editable $/TB legacy-storage assumption.
+- **As-Built / Handover document** — a new export (`Download As-Built Doc`) producing a full technical configuration record (sites/workloads, BCDR, security, hardware, pricing snapshot, compliance selections, network prerequisites, firewall ports) distinct from the customer-facing sales proposal.
+- **Competitive Positioning Notes** — a new Proposal-step section with SE talking points vs. Veeam, Rubrik, Commvault, and legacy Veritas NetBackup estates, factual/defensible rather than unverifiable claims about competitors.
+- **Standalone topology diagram export** — a "Download SVG" button on the topology diagram, independent of the full PDF export.
+
+### Changed
+- Pricing model: `datahawkTB` replaced with `enterpriseUpliftTB` (the Enterprise Edition premium over Core), and a new `primaryStorageCostPerTB` rate (for the TCO estimate) added to `pricing.json` and the editable pricing panel.
+- Node hardware data (`data.js`) now separates a documented reference `capacityUsableTB` (at minNodes/RF2) from the dynamically-computed actual usable capacity, and adds `estThroughputMBps` per family.
+
 ## [2.0.0] - 2026-09-25
 
 **Audit & accuracy pass.** Ran the wizard end-to-end in a real browser, read every line of `app.js`/`data.js`/`index.html`, and fixed the bugs and stale facts that turned up. No build step, so upgrading is just pulling the new files.

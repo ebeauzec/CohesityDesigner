@@ -40,7 +40,8 @@ class CohesityArchitectWizard {
       },
       deployment: {
         model: "hybrid", // 'onprem', 'saas', 'hybrid'
-        nodePreference: "flash" // 'flash', 'hybrid'
+        nodePreference: "flash", // 'flash', 'hybrid', 'entry'
+        edition: "enterprise" // 'core', 'enterprise' - driven by the DataHawk/Threat Defense toggle
       },
       pricing: {
         saasTB: 200,
@@ -48,8 +49,9 @@ class CohesityArchitectWizard {
         dataprotectTB: 120,
         cloudNode: 9800,
         fortknoxTB: 240,
-        datahawkTB: 90,
-        sitecontinuityFlat: 2400
+        enterpriseUpliftTB: 45,
+        sitecontinuityFlat: 2400,
+        primaryStorageCostPerTB: 600 // illustrative legacy primary-storage $/TB, used only for the TCO estimate
       }
     };
 
@@ -120,8 +122,9 @@ class CohesityArchitectWizard {
       { key: "dataprotectTB", label: "DataProtect Soft. ($/TB/yr)" },
       { key: "cloudNode", label: "Cloud Virtual Node ($/node/yr)" },
       { key: "fortknoxTB", label: "FortKnox Cloud Vault ($/TB/yr)" },
-      { key: "datahawkTB", label: "DataHawk Scan ($/TB/yr)" },
-      { key: "sitecontinuityFlat", label: "SiteContinuity Flat ($/yr)" }
+      { key: "enterpriseUpliftTB", label: "Enterprise Edition Uplift ($/TB/yr)" },
+      { key: "sitecontinuityFlat", label: "SiteContinuity Flat ($/yr)" },
+      { key: "primaryStorageCostPerTB", label: "Legacy Primary Storage ($/TB, for TCO)" }
     ];
 
     adjusters.forEach(adj => {
@@ -294,6 +297,8 @@ class CohesityArchitectWizard {
     this.dom.statFrontEnd = document.getElementById("rec-frontend-tb");
     this.dom.statUsable = document.getElementById("rec-usable-tb");
     this.dom.statNodes = document.getElementById("rec-node-config");
+    this.dom.statEdition = document.getElementById("rec-edition-badge");
+    this.dom.statGrowthPlan = document.getElementById("rec-growth-plan");
     this.dom.statRpo = document.getElementById("rec-rpo-sla");
     this.dom.statRto = document.getElementById("rec-rto-sla");
     this.dom.complianceScore = document.getElementById("compliance-score-val");
@@ -321,6 +326,15 @@ class CohesityArchitectWizard {
     this.dom.proposalComplianceSection = document.getElementById("proposal-compliance-section");
     this.dom.proposalComplianceMapping = document.getElementById("proposal-compliance-mapping");
     this.dom.pricingInputs = document.getElementById("pricing-adjuster-inputs");
+
+    // v3 additions: TCO, competitive positioning, as-built export, save/load scenario, SVG export
+    this.dom.proposalTCO = document.getElementById("proposal-tco-section");
+    this.dom.proposalCompetitive = document.getElementById("proposal-competitive-section");
+    this.dom.btnSaveScenario = document.getElementById("btn-save-scenario");
+    this.dom.btnLoadScenario = document.getElementById("btn-load-scenario");
+    this.dom.loadScenarioInput = document.getElementById("load-scenario-input");
+    this.dom.btnAsBuilt = document.getElementById("btn-as-built");
+    this.dom.btnDownloadSvg = document.getElementById("btn-download-svg");
   }
 
   bindEvents() {
@@ -494,7 +508,7 @@ class CohesityArchitectWizard {
     });
 
     document.getElementById("chk-datahawk").addEventListener("change", (e) => {
-      this.state.security.datahawk = e.target.checked;
+      this.setDataHawkState(e.target.checked);
       this.updateSidebarStats();
       this.renderTopologyDiagram();
     });
@@ -553,6 +567,31 @@ class CohesityArchitectWizard {
         }, 2000);
       });
     });
+
+    // v3 additions: save/load scenario, as-built export, topology SVG export
+    if (this.dom.btnSaveScenario) {
+      this.dom.btnSaveScenario.addEventListener("click", () => this.exportScenario());
+    }
+    if (this.dom.btnLoadScenario && this.dom.loadScenarioInput) {
+      this.dom.btnLoadScenario.addEventListener("click", () => this.dom.loadScenarioInput.click());
+      this.dom.loadScenarioInput.addEventListener("change", (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => this.importScenario(reader.result);
+        reader.readAsText(file);
+        e.target.value = ""; // allow re-selecting the same file later
+      });
+    }
+    if (this.dom.btnAsBuilt) {
+      this.dom.btnAsBuilt.addEventListener("click", () => {
+        const doc = this.generateAsBuiltDocument();
+        this.downloadBlob(`${this.slugify(this.state.project.name, "cohesity-project")}-as-built.txt`, doc, "text/plain");
+      });
+    }
+    if (this.dom.btnDownloadSvg) {
+      this.dom.btnDownloadSvg.addEventListener("click", () => this.downloadTopologySVG());
+    }
   }
 
   applyComplianceDefaults() {
@@ -565,28 +604,28 @@ class CohesityArchitectWizard {
     
     if (comps.includes("fedramp")) {
       this.setCheckboxState("chk-fortknox", true, 'security', 'fortknox');
-      this.setCheckboxState("chk-datahawk", true, 'security', 'datahawk');
+      this.setDataHawkState(true);
       this.setCheckboxState("chk-mpa", true, 'security', 'mpa');
-      
+
       const kmsSel = document.getElementById("sec-kms");
       if (kmsSel) {
         kmsSel.value = "customer";
         this.state.security.kms = "customer";
       }
     }
-    
+
     if (comps.includes("gdpr") || comps.includes("ccpa")) {
-      this.setCheckboxState("chk-datahawk", true, 'security', 'datahawk');
+      this.setDataHawkState(true);
     }
-    
+
     if (comps.includes("soc2")) {
       this.setCheckboxState("chk-mfa", true, 'security', 'mfa');
       this.setCheckboxState("chk-mpa", true, 'security', 'mpa');
     }
-    
+
     if (comps.includes("nis2")) {
       this.setCheckboxState("chk-fortknox", true, 'security', 'fortknox');
-      this.setCheckboxState("chk-datahawk", true, 'security', 'datahawk');
+      this.setDataHawkState(true);
       this.setCheckboxState("chk-sitecontinuity", true, 'bcdr', 'siteContinuity');
     }
   }
@@ -597,6 +636,16 @@ class CohesityArchitectWizard {
       el.checked = value;
       this.state[stateCategory][stateKey] = value;
     }
+  }
+
+  // Threat Defense & Data Classification (data.js id "datahawk") is now an Enterprise
+  // Edition feature, not a standalone SKU - toggling it drives which Cohesity Data Cloud
+  // edition the BOM prices against (see calculateSizing()/updateProposalAndBOM()).
+  setDataHawkState(value) {
+    this.state.security.datahawk = value;
+    this.state.deployment.edition = value ? "enterprise" : "core";
+    const el = document.getElementById("chk-datahawk");
+    if (el) el.checked = value;
   }
 
   loadWorkloadPresets() {
@@ -676,9 +725,43 @@ class CohesityArchitectWizard {
     this.updateUI();
   }
 
+  // Sizes a node count against a target usable TB using Cohesity's real resiliency model:
+  // RF2 (~50% usable) below the EC threshold, Erasure Coding (~80% usable) at 6+ nodes - see
+  // COHESITY_DATA.resiliencyModel. Also applies an operational utilization headroom (don't
+  // size a cluster to run 100% full) and enforces N+1 (must still meet the target after
+  // losing one node) and the family's real minimum cluster size.
+  sizeNodesForCapacity(nodeType, neededUsableTB) {
+    const model = COHESITY_DATA.resiliencyModel;
+    const target = neededUsableTB / model.utilizationHeadroom;
+    let n = nodeType.minNodes;
+
+    for (let guard = 0; guard < 500; guard++) {
+      const useEC = n >= model.erasureCoding.minNodes;
+      const usableRatio = useEC ? model.erasureCoding.usableRatio : model.rf2.usableRatio;
+      const usablePerNode = nodeType.capacityRawTB * usableRatio;
+      const survivingUsable = (n - 1) * usablePerNode; // N+1: must still meet target after losing 1 node
+      if (survivingUsable >= target || n > 500) {
+        return {
+          nodeCount: n,
+          usableRatio,
+          resiliencyMode: useEC ? model.erasureCoding.name : model.rf2.name,
+          usablePerNode,
+          deployedUsableTB: n * usablePerNode
+        };
+      }
+      n++;
+    }
+    // Fallback (should not realistically be reached)
+    const usableRatio = model.erasureCoding.usableRatio;
+    const usablePerNode = nodeType.capacityRawTB * usableRatio;
+    return { nodeCount: n, usableRatio, resiliencyMode: model.erasureCoding.name, usablePerNode, deployedUsableTB: n * usablePerNode };
+  }
+
   calculateSizing() {
     let totalFrontEndTB = 0;
     let totalUsableNeededTB = 0;
+    let totalUsableNeeded1yrTB = 0;
+    let totalRawUndupedTB = 0; // same as usable, but without the dedupe division - used for the TCO estimate
     let activeWorkloadsCount = 0;
     let dbActive = false;
     let dbCapacity = 0;
@@ -701,11 +784,13 @@ class CohesityArchitectWizard {
             dbCapacity += wl.capacityTB;
           }
 
-          // Apply growth compounded over 3 years: F = P * (1 + r)^3
+          // Apply growth compounded over 3 years: F = P * (1 + r)^3 (and ^1 for a Year-1 checkpoint)
           const compoundedCapacity = wl.capacityTB * Math.pow(1 + (wl.growth / 100), 3);
-          
+          const compoundedCapacity1yr = wl.capacityTB * (1 + (wl.growth / 100));
+
           // Apply Deduplication & Compression ratio reduction
           const deduplicatedCapacity = compoundedCapacity / wl.dedupe;
+          const deduplicatedCapacity1yr = compoundedCapacity1yr / wl.dedupe;
 
           // Apply retention policy multiplier based on workload properties
           let retentionMultiplier = 1.1; // Baseline
@@ -716,6 +801,8 @@ class CohesityArchitectWizard {
           if (type === "k8s") retentionMultiplier = 1.25; // Dev/K8s backups
 
           totalUsableNeededTB += (deduplicatedCapacity * retentionMultiplier);
+          totalUsableNeeded1yrTB += (deduplicatedCapacity1yr * retentionMultiplier);
+          totalRawUndupedTB += (compoundedCapacity * retentionMultiplier);
         }
       });
     });
@@ -726,18 +813,22 @@ class CohesityArchitectWizard {
       replicationMultiplier = 2.0; // Needs 1:1 replica copy
     } else if (this.state.bcdr.replication === "saas-vault" && this.state.security.fortknox) {
       // FortKnox represents a vaulted SaaS storage, does not add to local primary nodes sizing
-      replicationMultiplier = 1.0; 
+      replicationMultiplier = 1.0;
     }
 
     const calculatedUsableLocalTB = totalUsableNeededTB;
     const totalSystemUsableTB = totalUsableNeededTB * replicationMultiplier;
 
-    // Node recommendations: Physical cluster sizing (Starts at 3 nodes min)
+    // Node recommendations: Physical cluster sizing (real RF2/EC resiliency model + N+1 + headroom)
     let nodeRecommendation = "";
     let localNodeCount = 0;
     let cloudNodeCount = 0;
     let fortKnoxVaultTB = 0;
     let nodeModelName = "";
+    let resiliencyMode = "";
+    let deployedUsableTB = 0;
+    let throughputBound = false;
+    let year1NodeCount = 0;
 
     let nodeType = null;
     if (this.state.deployment.model === "saas") {
@@ -754,11 +845,34 @@ class CohesityArchitectWizard {
         || COHESITY_DATA.nodeTypes.physical.find(n => n.id === "c6200")
         || COHESITY_DATA.nodeTypes.physical[0];
 
-      const nodeUsableTB = nodeType.capacityUsableTB;
-      // N+1 cluster configuration: sized to tolerate losing 1 node, floored at the family's minimum node count.
-      localNodeCount = Math.max(nodeType.minNodes, Math.ceil(calculatedUsableLocalTB / nodeUsableTB) + 1);
+      const sized = this.sizeNodesForCapacity(nodeType, calculatedUsableLocalTB);
+      localNodeCount = sized.nodeCount;
+      resiliencyMode = sized.resiliencyMode;
+      deployedUsableTB = sized.deployedUsableTB;
+
+      // Throughput check: capacity-driven node count may not carry enough aggregate ingest
+      // bandwidth. Bump node count (keeping N+1) until per-node throughput covers the
+      // required raw ingest rate. estThroughputMBps is an SE planning estimate (see data.js).
+      const bw = this.calculateBandwidth();
+      const requiredMBps = bw.ingestRawMbps / 8;
+      if (nodeType.estThroughputMBps) {
+        while ((localNodeCount - 1) * nodeType.estThroughputMBps < requiredMBps) {
+          localNodeCount++;
+          throughputBound = true;
+        }
+        if (throughputBound) {
+          const useEC = localNodeCount >= COHESITY_DATA.resiliencyModel.erasureCoding.minNodes;
+          const usableRatio = useEC ? COHESITY_DATA.resiliencyModel.erasureCoding.usableRatio : COHESITY_DATA.resiliencyModel.rf2.usableRatio;
+          resiliencyMode = useEC ? COHESITY_DATA.resiliencyModel.erasureCoding.name : COHESITY_DATA.resiliencyModel.rf2.name;
+          deployedUsableTB = localNodeCount * nodeType.capacityRawTB * usableRatio;
+        }
+      }
+
+      // Year-1 phased-expansion checkpoint, sized against the same node family.
+      year1NodeCount = this.sizeNodesForCapacity(nodeType, totalUsableNeeded1yrTB).nodeCount;
+
       nodeModelName = `${nodeType.model} (${nodeType.tier})`;
-      nodeRecommendation = `${localNodeCount}x Cohesity ${nodeModelName} Nodes (${(localNodeCount * nodeUsableTB).toFixed(0)}TB usable, N+1 Config)`;
+      nodeRecommendation = `${localNodeCount}x Cohesity ${nodeModelName} Nodes (${deployedUsableTB.toFixed(0)}TB usable @ ${resiliencyMode}, N+1, ${(COHESITY_DATA.resiliencyModel.utilizationHeadroom * 100).toFixed(0)}% util. headroom)${throughputBound ? ' — sized for ingest throughput' : ''}`;
     }
 
     // Cloud Node Replication sizing
@@ -777,12 +891,19 @@ class CohesityArchitectWizard {
     return {
       frontEndTB: totalFrontEndTB.toFixed(1),
       usableLocalTB: calculatedUsableLocalTB.toFixed(1),
+      usableLocalTBRaw: calculatedUsableLocalTB,
+      usableNeeded1yrTB: totalUsableNeeded1yrTB.toFixed(1),
+      rawUndupedTBRaw: totalRawUndupedTB,
       totalSystemUsableTB: totalSystemUsableTB.toFixed(1),
       localNodeCount,
+      year1NodeCount,
       cloudNodeCount,
       fortKnoxVaultTB,
       nodeRecommendation,
       nodeModelName,
+      resiliencyMode,
+      deployedUsableTB,
+      throughputBound,
       activeWorkloadsCount
     };
   }
@@ -962,7 +1083,7 @@ class CohesityArchitectWizard {
     }
     if (!this.state.security.datahawk) {
       score -= 20;
-      deductList.push("No active AI/ML threat detection scanning (DataHawk)");
+      deductList.push("No active AI/ML threat detection scanning (requires Data Cloud Enterprise Edition)");
     }
     if (!this.state.security.mfa) {
       score -= 15;
@@ -999,7 +1120,23 @@ class CohesityArchitectWizard {
     this.dom.statFrontEnd.textContent = `${sizing.frontEndTB} TB`;
     this.dom.statUsable.textContent = `${sizing.usableLocalTB} TB`;
     this.dom.statNodes.textContent = sizing.nodeRecommendation;
-    
+
+    // Edition badge (drives, and is driven by, the Threat Defense/DataHawk toggle)
+    if (this.dom.statEdition) {
+      this.dom.statEdition.textContent = this.state.deployment.edition === "enterprise" ? "Enterprise Edition" : "Core Edition";
+    }
+
+    // Phased-expansion / growth-plan checkpoint
+    if (this.dom.statGrowthPlan) {
+      if (sizing.year1NodeCount && sizing.localNodeCount) {
+        this.dom.statGrowthPlan.textContent = sizing.year1NodeCount < sizing.localNodeCount
+          ? `Deploy ${sizing.year1NodeCount} nodes now → grow to ${sizing.localNodeCount} within 3 years`
+          : `${sizing.localNodeCount} nodes covers the full 3-year forecast today — no phased add planned`;
+      } else {
+        this.dom.statGrowthPlan.textContent = "";
+      }
+    }
+
     // RPO / RTO UI outputs
     this.dom.statRpo.textContent = this.state.bcdr.rpo;
     this.dom.statRto.textContent = this.state.bcdr.rto;
@@ -1073,7 +1210,7 @@ class CohesityArchitectWizard {
       { label: "Helios Control Plane Multi-Factor Auth (MFA)", pass: this.state.security.mfa },
       { label: "Helios Multi-Party Approval (MPA) Quorum active", pass: this.state.security.mpa },
       { label: "Isolated off-site air-gapped recovery (FortKnox)", pass: this.state.security.fortknox },
-      { label: "Real-time AI malware anomaly scanning (DataHawk)", pass: this.state.security.datahawk },
+      { label: "Real-time AI malware anomaly scanning (Enterprise Edition)", pass: this.state.security.datahawk },
       { label: "Enterprise Key Management integration (KMS)", pass: this.state.security.kms === "customer" }
     ];
 
@@ -1133,6 +1270,11 @@ class CohesityArchitectWizard {
             <li><strong>Outbound Telemetry:</strong> Keep port TCP 443 outbound open to <code>*.cohesity.com</code> for Helios cloud monitoring.</li>
             ${isFortKnoxActive ? '<li><strong>Air-Gapped Vaulting:</strong> Outbound TCP 443 routes are required to Amazon Web Services endpoints for FortKnox SaaS data transfers.</li>' : ''}
             ${isReplicationActive ? '<li><strong>Replication Paths:</strong> Configure bidirectional routing for port TCP 50051 between the VIP pools of primary and remote disaster recovery clusters.</li>' : ''}
+          </ul>
+          <h4 style="font-size:12.5px; color:var(--accent-blue); margin:14px 0 6px 0; border-bottom:1px solid var(--border-color); padding-bottom:6px;">Cluster-Internal Network Prerequisites</h4>
+          <p style="margin:0 0 8px 0; font-size:11px; line-height:1.4; color:var(--text-secondary);">Distinct from the external firewall rows above — these apply to the cluster's own node-to-node network, regardless of firewall policy.</p>
+          <ul style="padding-left:14px; margin:0; display:flex; flex-direction:column; gap:6px; font-size:11px; color:var(--text-secondary);">
+            ${COHESITY_DATA.clusterNetworkRequirements.map(req => `<li><strong>${req.item}:</strong> ${req.detail}</li>`).join('')}
           </ul>
         `;
         this.dom.playbookGuide.innerHTML = guideHTML;
@@ -1212,6 +1354,218 @@ class CohesityArchitectWizard {
     }
   }
 
+  // --- TCO estimate, save/load scenario, as-built export, competitive positioning, SVG export ---
+
+  calculateTCO() {
+    const sizing = this.calculateSizing();
+    const rawTB = sizing.rawUndupedTBRaw || 0;
+    const usableTB = sizing.usableLocalTBRaw || 0;
+    const spaceSavedTB = Math.max(0, rawTB - usableTB);
+    const avoidedCostUSD = spaceSavedTB * (this.state.pricing.primaryStorageCostPerTB || 0);
+    const dedupeRatioBlended = usableTB > 0 ? (rawTB / usableTB) : 1;
+    return { spaceSavedTB, avoidedCostUSD, dedupeRatioBlended, rawTB, usableTB };
+  }
+
+  renderTCO() {
+    if (!this.dom.proposalTCO) return;
+    const tco = this.calculateTCO();
+    this.dom.proposalTCO.innerHTML = `
+      <h3 style="font-size:15px; color:var(--accent-green); margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+        <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">savings</span>
+        Consolidation Value &amp; TCO Estimate
+      </h3>
+      <p style="font-size:11px; color:var(--text-muted); margin:0 0 10px 0; line-height:1.4;">Illustrative only — compares the deduplicated, GFS-adjusted usable footprint actually stored against a naive undeduplicated equivalent, priced at an editable $/TB legacy primary-storage assumption (adjustable above). Not a substitute for a real cost assessment against the customer's current environment.</p>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px;">
+        <div>
+          <div style="font-size:10px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px;">Blended Reduction</div>
+          <div style="font-size:18px; font-weight:700; color:var(--accent-blue); font-family:var(--font-mono);">${tco.dedupeRatioBlended.toFixed(1)}:1</div>
+        </div>
+        <div>
+          <div style="font-size:10px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px;">Capacity Avoided</div>
+          <div style="font-size:18px; font-weight:700; color:var(--accent-green); font-family:var(--font-mono);">${tco.spaceSavedTB.toFixed(1)} TB</div>
+        </div>
+        <div>
+          <div style="font-size:10px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px;">Est. Avoided Storage Cost</div>
+          <div style="font-size:18px; font-weight:700; color:var(--accent-green); font-family:var(--font-mono);">$${Math.round(tco.avoidedCostUSD).toLocaleString()}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  renderCompetitivePositioning() {
+    if (!this.dom.proposalCompetitive) return;
+    this.dom.proposalCompetitive.innerHTML = COHESITY_DATA.competitivePositioning.map(c => `
+      <div style="padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <strong style="color:var(--accent-blue); font-size:12px;">vs. ${c.vendor}</strong>
+        <p style="font-size:11.5px; color:var(--text-secondary); margin:4px 0 0 0; line-height:1.45;">${c.angle}</p>
+      </div>
+    `).join("");
+  }
+
+  downloadBlob(filename, content, mime) {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  slugify(name, fallback) {
+    return (name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || fallback;
+  }
+
+  exportScenario() {
+    const snapshot = {
+      _type: "cohesity-architect-toolkit-scenario",
+      _version: 1,
+      savedAt: new Date().toISOString(),
+      project: this.state.project,
+      sites: this.state.sites,
+      activeSiteId: this.state.activeSiteId,
+      bcdr: this.state.bcdr,
+      security: this.state.security,
+      deployment: this.state.deployment,
+      pricing: this.state.pricing
+    };
+    this.downloadBlob(`${this.slugify(this.state.project.name, "cohesity-scenario")}.json`, JSON.stringify(snapshot, null, 2), "application/json");
+  }
+
+  importScenario(jsonText) {
+    let data;
+    try {
+      data = JSON.parse(jsonText);
+    } catch (e) {
+      alert("Could not load scenario: the file is not valid JSON.");
+      return;
+    }
+    if (!data || data._type !== "cohesity-architect-toolkit-scenario" || !Array.isArray(data.sites) || data.sites.length === 0) {
+      alert("Could not load scenario: this file doesn't look like a Cohesity Architect Toolkit scenario export.");
+      return;
+    }
+
+    this.state.project = data.project || this.state.project;
+    this.state.sites = data.sites;
+    this.state.activeSiteId = (data.activeSiteId && data.sites.some(s => s.id === data.activeSiteId)) ? data.activeSiteId : data.sites[0].id;
+    this.state.bcdr = data.bcdr || this.state.bcdr;
+    this.state.security = data.security || this.state.security;
+    this.state.deployment = data.deployment || this.state.deployment;
+    if (data.pricing) this.state.pricing = { ...this.state.pricing, ...data.pricing };
+
+    // Re-sync every DOM control to the loaded state
+    const projName = document.getElementById("proj-name");
+    if (projName) projName.value = this.state.project.name || "";
+    const projIndustry = document.getElementById("proj-industry");
+    if (projIndustry) projIndustry.value = this.state.project.industry || "Other";
+    document.querySelectorAll(".compliance-chk").forEach(chk => {
+      const checked = (this.state.project.compliance || []).includes(chk.value);
+      chk.checked = checked;
+      const card = chk.closest(".selectable-item");
+      if (card) card.classList.toggle("selected", checked);
+    });
+    const rpoSel = document.getElementById("rpo-select");
+    if (rpoSel) rpoSel.value = this.state.bcdr.rpo;
+    const rtoSel = document.getElementById("rto-select");
+    if (rtoSel) rtoSel.value = this.state.bcdr.rto;
+    const replSel = document.getElementById("bcdr-repl-select");
+    if (replSel) replSel.value = this.state.bcdr.replication;
+    this.setCheckboxState("chk-sitecontinuity", this.state.bcdr.siteContinuity, "bcdr", "siteContinuity");
+    this.setCheckboxState("chk-fortknox", this.state.security.fortknox, "security", "fortknox");
+    this.setDataHawkState(this.state.security.datahawk);
+    this.setCheckboxState("chk-mfa", this.state.security.mfa, "security", "mfa");
+    this.setCheckboxState("chk-mpa", this.state.security.mpa, "security", "mpa");
+    const kmsSel = document.getElementById("sec-kms");
+    if (kmsSel) kmsSel.value = this.state.security.kms;
+    document.querySelectorAll("input[name='deploy-model']").forEach(r => { r.checked = (r.value === this.state.deployment.model); });
+    document.querySelectorAll("input[name='node-perf']").forEach(r => { r.checked = (r.value === this.state.deployment.nodePreference); });
+
+    this.renderSitesManagerUI();
+    this.loadWorkloadPresets();
+    this.renderPricingAdjuster();
+    this.updateUI();
+    alert(`Scenario loaded: ${this.state.project.name || "Untitled"}`);
+  }
+
+  generateAsBuiltDocument() {
+    const sizing = this.calculateSizing();
+    const compliance = this.calculateComplianceScore();
+    const bw = this.calculateBandwidth();
+
+    let text = `=========================================
+COHESITY AS-BUILT / HANDOVER DOCUMENT
+=========================================
+Project: ${this.state.project.name}
+Sector: ${this.state.project.industry}
+Document generated: ${this.getFormattedDate()}
+Tool: Cohesity Architect Toolkit (client-side sizing wizard)
+
+This document captures the exact configuration this sizing was generated against, for
+implementation handover or later audit. It is a technical record, not the customer-facing
+sales proposal (see "Copy Proposal Text" for that).
+
+1. SITES & WORKLOADS
+---------------------
+`;
+    this.state.sites.forEach(site => {
+      text += `\nSite: ${site.name} (id: ${site.id})\n`;
+      Object.keys(site.workloads).forEach(type => {
+        const wl = site.workloads[type];
+        const label = COHESITY_DATA.workloadPresets[type].name;
+        text += `  - ${label}: ${wl.active ? "ACTIVE" : "inactive"} | ${wl.capacityTB} TB | growth ${wl.growth}%/yr | dedupe ${wl.dedupe}:1 | retention ${wl.retentionDays}d | backup window ${wl.windowHours}h\n`;
+      });
+    });
+
+    text += `\n2. BUSINESS CONTINUITY & DR CONFIGURATION\n------------------------------------------\n`;
+    text += `RPO Target: ${this.state.bcdr.rpo}\nRTO Target: ${this.state.bcdr.rto}\nReplication Mode: ${this.state.bcdr.replication}\nSiteContinuity DR Orchestrator: ${this.state.bcdr.siteContinuity ? "ENABLED" : "disabled"}\n`;
+
+    text += `\n3. SECURITY CONFIGURATION\n--------------------------\n`;
+    text += `Cohesity Data Cloud Edition: ${this.state.deployment.edition === "enterprise" ? "Enterprise" : "Core"}\nFortKnox Cyber Vault: ${this.state.security.fortknox ? "ENABLED" : "disabled"}\nThreat Defense & Data Classification: ${this.state.security.datahawk ? "ENABLED (Enterprise Edition)" : "disabled"}\nHelios MFA: ${this.state.security.mfa ? "ENABLED" : "disabled"}\nMulti-Party Authorization (MPA): ${this.state.security.mpa ? "ENABLED" : "disabled"}\nKMS: ${this.state.security.kms === "customer" ? "Customer-Managed External KMS" : "Cohesity-Managed Default Keys"}\nCyber Resilience Index: ${compliance.score}/100\n`;
+
+    text += `\n4. DEPLOYMENT & HARDWARE\n-------------------------\n`;
+    text += `Deployment Model: ${this.state.deployment.model}\n`;
+    if (this.state.deployment.model !== "saas") {
+      text += `Hardware Class Preference: ${this.state.deployment.nodePreference}\nRecommended Configuration: ${sizing.nodeRecommendation}\nResiliency Mode: ${sizing.resiliencyMode}\nYear-1 Node Checkpoint: ${sizing.year1NodeCount} nodes\nFull 3-Year Node Count: ${sizing.localNodeCount} nodes\n`;
+    }
+    text += `Front-End Data: ${sizing.frontEndTB} TB\nUsable Storage Required (3yr): ${sizing.usableLocalTB} TB\n`;
+    if (this.state.security.fortknox) text += `FortKnox Vault Size: ${sizing.fortKnoxVaultTB} TB\n`;
+
+    text += `\n5. BANDWIDTH SIZING\n--------------------\n`;
+    text += `Daily Change (raw): ${bw.dailyChangeRawTB} TB/day\nDaily Change (deduplicated): ${bw.dailyChangeDedupeTB} TB/day\nIngest Bandwidth: ${bw.ingestDedupeMbps} Mbps (${bw.ingestDedupeMBs} MB/s)\n`;
+
+    text += `\n6. PRICING SNAPSHOT (rates in effect when this document was generated)\n------------------------------------------------------------------------\n`;
+    Object.keys(this.state.pricing).forEach(k => {
+      text += `  ${k}: $${this.state.pricing[k].toLocaleString()}\n`;
+    });
+
+    text += `\n7. COMPLIANCE FRAMEWORKS SELECTED\n-----------------------------------\n`;
+    text += (this.state.project.compliance && this.state.project.compliance.length > 0)
+      ? this.state.project.compliance.map(c => COHESITY_DATA.complianceFrameworks[c] ? COHESITY_DATA.complianceFrameworks[c].name : c).join(", ") + "\n"
+      : "None selected.\n";
+
+    text += `\n8. CLUSTER-INTERNAL NETWORK PREREQUISITES\n-------------------------------------------\n`;
+    COHESITY_DATA.clusterNetworkRequirements.forEach(req => {
+      text += `  - ${req.item}: ${req.detail}\n`;
+    });
+
+    text += `\n9. FIREWALL / TCP PORT REQUIREMENTS\n-------------------------------------\n`;
+    this.getNetworkPorts().forEach(p => {
+      text += `  - ${p.port} (${p.proto}) ${p.src} -> ${p.dest}: ${p.desc} [${p.active ? "ACTIVE" : "inactive"}]\n`;
+    });
+
+    return text;
+  }
+
+  downloadTopologySVG() {
+    if (!this.dom.svgContainer) return;
+    const svgEl = this.dom.svgContainer.querySelector("svg");
+    if (!svgEl) return;
+    const svgText = new XMLSerializer().serializeToString(svgEl);
+    this.downloadBlob(`${this.slugify(this.state.project.name, "cohesity-topology")}-diagram.svg`, svgText, "image/svg+xml");
+  }
+
   updateUI() {
     this.updateSidebarStats();
     this.renderTopologyDiagram();
@@ -1254,9 +1608,13 @@ class CohesityArchitectWizard {
     }
     
     if (this.state.security.datahawk) {
-      summaryText += `DataHawk is active to perform machine learning anomaly scanning, Yara threat intelligence signature checks, and automated sensitive data classification. `;
+      summaryText += `Cohesity Data Cloud <strong>Enterprise Edition</strong> is selected, adding machine learning anomaly scanning, threat hunting/containment, and automated sensitive data classification on top of Core Edition's backup and recovery capabilities. `;
     }
-    
+
+    if (this.state.deployment.model !== "saas" && sizing.year1NodeCount && sizing.year1NodeCount < sizing.localNodeCount) {
+      summaryText += `<br><br><strong>Phased deployment:</strong> the full 3-year forecast sizes to ${sizing.localNodeCount} nodes, but only <strong>${sizing.year1NodeCount} nodes</strong> are required to cover Year 1 — the remaining capacity can be added later as a non-disruptive scale-out expansion. `;
+    }
+
     if (complianceNames.length > 0) {
       summaryText += `<br><br>This architecture incorporates structural configurations designed to assist with your regulatory compliance targets for <strong>${complianceNames.join(", ")}</strong>.`;
     }
@@ -1359,17 +1717,18 @@ class CohesityArchitectWizard {
       `;
     }
 
-    // Line 4: DataHawk Security
-    if (this.state.security.datahawk) {
-      const datahawkPricePerTB = this.state.pricing.datahawkTB; // Annual cost per TB
-      const dhLinePrice = parseFloat(sizing.frontEndTB) * datahawkPricePerTB;
-      totalAnnualPrice += dhLinePrice;
+    // Line 4: Enterprise Edition Uplift (bundles Threat Defense & Data Classification,
+    // formerly the standalone DataHawk SKU - see data.js "datahawk" product note)
+    if (this.state.deployment.edition === "enterprise") {
+      const upliftPricePerTB = this.state.pricing.enterpriseUpliftTB;
+      const upliftLinePrice = parseFloat(sizing.frontEndTB) * upliftPricePerTB;
+      totalAnnualPrice += upliftLinePrice;
       tableHTML += `
         <tr style="border-bottom: 1px solid var(--border-color);">
-          <td style="padding: 12px; font-weight: 600;">Cohesity DataHawk Threat Scan / Classify</td>
+          <td style="padding: 12px; font-weight: 600;">Cohesity Data Cloud Enterprise Edition Uplift</td>
           <td style="padding: 12px; text-align: center;">${sizing.frontEndTB} TB</td>
-          <td style="padding: 12px; color: var(--text-secondary);">AI threat analysis, Yara-rule malware engine, and sensitive data discovery scanner ($${datahawkPricePerTB.toLocaleString()} / TB)</td>
-          <td style="padding: 12px; text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--accent-green);">$${dhLinePrice.toLocaleString()}</td>
+          <td style="padding: 12px; color: var(--text-secondary);">Threat Defense (ransomware anomaly detection, threat hunting) & sensitive data classification, bundled in Enterprise Edition ($${upliftPricePerTB.toLocaleString()} / TB over Core)</td>
+          <td style="padding: 12px; text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--accent-green);">$${upliftLinePrice.toLocaleString()}</td>
         </tr>
       `;
     }
@@ -1501,6 +1860,10 @@ class CohesityArchitectWizard {
         this.dom.proposalComplianceSection.style.display = "none";
       }
     }
+
+    // 5. TCO/consolidation value and competitive positioning
+    this.renderTCO();
+    this.renderCompetitivePositioning();
   }
 
   copyProposalToClipboard() {
@@ -1535,12 +1898,21 @@ Recommended primary cluster configuration: ${sizing.nodeRecommendation}.
       text += `Cohesity FortKnox cloud cyber vaulting is incorporated, isolating an immutable copy of ${sizing.fortKnoxVaultTB} TB in a virtually air-gapped SaaS cloud vault.\n`;
     }
     if (this.state.security.datahawk) {
-      text += `DataHawk is active to perform machine learning anomaly scanning, Yara threat intelligence signature checks, and automated sensitive data classification.\n`;
+      text += `Cohesity Data Cloud Enterprise Edition is selected, adding machine learning anomaly scanning, threat hunting/containment, and automated sensitive data classification on top of Core Edition.\n`;
+    }
+    if (this.state.deployment.model !== "saas" && sizing.year1NodeCount && sizing.year1NodeCount < sizing.localNodeCount) {
+      text += `Phased deployment: ${sizing.year1NodeCount} nodes cover Year 1; the remaining capacity to reach ${sizing.localNodeCount} nodes can be added later as a non-disruptive expansion.\n`;
     }
     if (complianceNames.length > 0) {
       text += `\nRegulatory Compliance Alignment Targets: ${complianceNames.join(", ")}.\n`;
     }
- 
+
+    const tco = this.calculateTCO();
+    text += `\nConsolidation Value (illustrative TCO estimate):\n`;
+    text += `- Blended deduplication/compression reduction: ${tco.dedupeRatioBlended.toFixed(1)}:1\n`;
+    text += `- Legacy primary-storage capacity avoided: ${tco.spaceSavedTB.toFixed(1)} TB\n`;
+    text += `- Estimated avoided storage cost: $${Math.round(tco.avoidedCostUSD).toLocaleString()} (at $${(this.state.pricing.primaryStorageCostPerTB || 0).toLocaleString()}/TB legacy storage assumption)\n`;
+
     const bandwidths = this.calculateBandwidth();
     text += `\nNetwork & Bandwidth Sizing:\n`;
     text += `- Daily Backup Change Rate (Raw): ${bandwidths.dailyChangeRawTB} TB/day\n`;
@@ -1586,10 +1958,10 @@ Estimated Annual Subscription Details:
       totalAnnualPrice += fkPrice;
       text += `- Cohesity FortKnox Cyber Vault capacity: $${fkPrice.toLocaleString()}/yr ($${this.state.pricing.fortknoxTB.toLocaleString()} / TB)\n`;
     }
-    if (this.state.security.datahawk) {
-      const dhPrice = parseFloat(sizing.frontEndTB) * this.state.pricing.datahawkTB;
-      totalAnnualPrice += dhPrice;
-      text += `- Cohesity DataHawk ML scan & classification: $${dhPrice.toLocaleString()}/yr ($${this.state.pricing.datahawkTB.toLocaleString()} / TB)\n`;
+    if (this.state.deployment.edition === "enterprise") {
+      const upliftPrice = parseFloat(sizing.frontEndTB) * this.state.pricing.enterpriseUpliftTB;
+      totalAnnualPrice += upliftPrice;
+      text += `- Cohesity Data Cloud Enterprise Edition uplift (Threat Defense & data classification): $${upliftPrice.toLocaleString()}/yr ($${this.state.pricing.enterpriseUpliftTB.toLocaleString()} / TB)\n`;
     }
     if (this.state.bcdr.siteContinuity && this.state.bcdr.replication !== "none") {
       const scPrice = this.state.pricing.sitecontinuityFlat;
@@ -1620,7 +1992,7 @@ Security checks log:
       { label: "Helios Control Plane Multi-Factor Auth (MFA)", pass: this.state.security.mfa },
       { label: "Helios Multi-Party Approval (MPA) Quorum active", pass: this.state.security.mpa },
       { label: "Isolated off-site air-gapped recovery (FortKnox)", pass: this.state.security.fortknox },
-      { label: "Real-time AI malware anomaly scanning (DataHawk)", pass: this.state.security.datahawk },
+      { label: "Real-time AI malware anomaly scanning (Enterprise Edition)", pass: this.state.security.datahawk },
       { label: "Enterprise Key Management integration (KMS)", pass: this.state.security.kms === "customer" }
     ];
 
@@ -1662,6 +2034,16 @@ Security checks log:
     const portsList = this.getNetworkPorts();
     portsList.forEach(p => {
       text += `- Port: ${p.port.padEnd(10)} | Proto: ${p.proto.padEnd(11)} | Src: ${p.src.padEnd(18)} -> Dest: ${p.dest.padEnd(18)} | Purpose: ${p.desc} | Status: [${p.active ? 'ACTIVE' : 'INACTIVE'}]\n`;
+    });
+
+    text += `\n6a. CLUSTER-INTERNAL NETWORK PREREQUISITES\n-------------------------------------------\n`;
+    COHESITY_DATA.clusterNetworkRequirements.forEach(req => {
+      text += `- ${req.item}: ${req.detail}\n`;
+    });
+
+    text += `\n7. COMPETITIVE POSITIONING NOTES (SE talking points, verify against current battlecard)\n-------------------------------------------------------------------------------------------\n`;
+    COHESITY_DATA.competitivePositioning.forEach(c => {
+      text += `- vs. ${c.vendor}: ${c.angle}\n`;
     });
 
     const originalText = this.dom.btnCopyProposal.innerHTML;
@@ -2046,6 +2428,7 @@ Security checks log:
   generateReportAndPrint() {
     const sizing = this.calculateSizing();
     const compliance = this.calculateComplianceScore();
+    const tcoForPrint = this.calculateTCO();
 
     // Renders structural data inside the print section
     let workloadsHTML = "";
@@ -2255,16 +2638,16 @@ Security checks log:
       `;
     }
 
-    if (this.state.security.datahawk) {
-      const datahawkPricePerTB = this.state.pricing.datahawkTB;
-      const dhLinePrice = parseFloat(sizing.frontEndTB) * datahawkPricePerTB;
-      totalAnnualPrice += dhLinePrice;
+    if (this.state.deployment.edition === "enterprise") {
+      const upliftPricePerTB = this.state.pricing.enterpriseUpliftTB;
+      const upliftLinePrice = parseFloat(sizing.frontEndTB) * upliftPricePerTB;
+      totalAnnualPrice += upliftLinePrice;
       printedBOMRows += `
         <tr>
-          <td><strong>Cohesity DataHawk Threat Scan / Classify</strong></td>
+          <td><strong>Cohesity Data Cloud Enterprise Edition Uplift</strong></td>
           <td>${sizing.frontEndTB} TB</td>
-          <td>AI threat scanning & sensitive data discovery ($${datahawkPricePerTB.toLocaleString()} / TB)</td>
-          <td style="text-align: right; font-weight: bold; color: #1e7e34;">$${dhLinePrice.toLocaleString()}</td>
+          <td>Threat Defense & sensitive data classification, bundled in Enterprise Edition ($${upliftPricePerTB.toLocaleString()} / TB over Core)</td>
+          <td style="text-align: right; font-weight: bold; color: #1e7e34;">$${upliftLinePrice.toLocaleString()}</td>
         </tr>
       `;
     }
@@ -2319,6 +2702,7 @@ Security checks log:
               <div class="print-bom-val" style="color:#00d68f">$${totalAnnualPrice.toLocaleString()}</div>
             </div>
           </div>
+          <p style="font-size: 8pt; color: #888; margin-top: 10px;">Hardware: ${sizing.nodeRecommendation || "N/A"}${sizing.year1NodeCount && sizing.localNodeCount && sizing.year1NodeCount < sizing.localNodeCount ? ` — phased: ${sizing.year1NodeCount} nodes cover Year 1, growing to ${sizing.localNodeCount} nodes by Year 3.` : ""}</p>
         </div>
 
         <div class="print-section">
@@ -2358,6 +2742,25 @@ Security checks log:
               ${workloadsHTML}
             </tbody>
           </table>
+        </div>
+
+        <div class="print-section">
+          <h2>3a. Consolidation Value &amp; TCO Estimate</h2>
+          <p style="font-size: 8pt; color: #888;">Illustrative only — compares the deduplicated, GFS-adjusted usable footprint actually stored against a naive undeduplicated equivalent, priced at an editable $/TB legacy primary-storage assumption. Not a substitute for a real cost assessment.</p>
+          <div class="print-bom-summary">
+            <div class="print-bom-col" style="width: 30%;">
+              <h3>Blended Reduction</h3>
+              <div class="print-bom-val">${tcoForPrint.dedupeRatioBlended.toFixed(1)}:1</div>
+            </div>
+            <div class="print-bom-col" style="width: 30%;">
+              <h3>Capacity Avoided</h3>
+              <div class="print-bom-val" style="color:var(--accent-blue)">${tcoForPrint.spaceSavedTB.toFixed(1)} TB</div>
+            </div>
+            <div class="print-bom-col" style="width: 30%;">
+              <h3>Est. Avoided Storage Cost</h3>
+              <div class="print-bom-val" style="color:#00d68f">$${Math.round(tcoForPrint.avoidedCostUSD).toLocaleString()}</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2450,6 +2853,44 @@ Security checks log:
               `).join('')}
             </tbody>
           </table>
+        </div>
+
+        <div class="print-section" style="page-break-inside: avoid;">
+          <h2>6a. Cluster-Internal Network Prerequisites</h2>
+          <p style="font-size: 8pt; color: #888;">Distinct from the external firewall rows above — these apply to the cluster's own node-to-node network, regardless of firewall policy.</p>
+          <table class="print-table" style="font-size: 8.5pt;">
+            <thead>
+              <tr style="background:#fafafa;">
+                <th style="padding: 6px; width: 32%;">Requirement</th>
+                <th style="padding: 6px;">Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${COHESITY_DATA.clusterNetworkRequirements.map(req => `
+                <tr style="border-bottom: 1px solid #eee;">
+                  <td style="padding: 6px;"><strong>${req.item}</strong></td>
+                  <td style="padding: 6px;">${req.detail}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="print-page" style="page-break-before: always;">
+        <div class="print-header">
+          <h1>Cohesity Solution Design (Cont.)</h1>
+          <div style="font-size: 8pt; color: #888;">Project: ${this.state.project.name} | Competitive Positioning</div>
+        </div>
+        <div class="print-section">
+          <h2>7. Competitive Positioning Notes</h2>
+          <p style="font-size: 8pt; color: #888;">SE talking points, not independently verified competitor claims — validate against the current competitive battlecard before customer use.</p>
+          ${COHESITY_DATA.competitivePositioning.map(c => `
+            <div style="margin-top: 10px; padding: 8px 0; border-bottom: 1px solid #eee;">
+              <strong style="color: #0056b3; font-size: 9.5pt;">vs. ${c.vendor}</strong>
+              <p style="font-size: 8.5pt; color: #444; margin: 4px 0 0 0; line-height: 1.4;">${c.angle}</p>
+            </div>
+          `).join('')}
         </div>
       </div>
       ${printComplianceHTML}

@@ -4,6 +4,7 @@
   "dataprotectTB": 120,
   "cloudNode": 9800,
   "fortknoxTB": 240,
-  "datahawkTB": 90,
-  "sitecontinuityFlat": 2400
+  "enterpriseUpliftTB": 45,
+  "sitecontinuityFlat": 2400,
+  "primaryStorageCostPerTB": 600
 }
