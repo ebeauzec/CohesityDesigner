@@ -4,6 +4,13 @@
  */
 
 const COHESITY_DATA = {
+  // Context note for SE proposals: Cohesity completed its combination with Veritas'
+  // enterprise data protection business (including NetBackup) on Dec 10, 2024, becoming
+  // the world's largest data protection software provider by market share. This wizard
+  // sizes the native Cohesity Data Cloud / DataProtect platform; legacy Veritas NetBackup
+  // estates follow a separate migration/coexistence path and are out of scope here.
+  companyContext: "Cohesity completed its combination with Veritas' enterprise data protection business (including NetBackup) in December 2024, forming the world's largest data protection software provider by market share. This proposal is scoped to the native Cohesity Data Cloud / DataProtect platform; legacy Veritas NetBackup estates follow a separate migration or coexistence path — engage your Cohesity account team for combined-portfolio scenarios.",
+
   products: [
     {
       id: "dataprotect",
@@ -17,6 +24,19 @@ const COHESITY_DATA = {
         "Agentless protection for hypervisors, databases, and physical systems"
       ],
       licensing: "Per TB Front-End Capacity or Per Node Subscription"
+    },
+    {
+      id: "alta",
+      name: "Cohesity Alta",
+      tagline: "Cloud-Native SaaS Data Management Platform",
+      description: "Cohesity's cloud-native, consumption-based platform delivering backup, cyber resilience, and data management as a service. Serves as the unified SaaS control plane spanning both native Cohesity and legacy Veritas NetBackup-protected estates following the December 2024 Cohesity-Veritas combination.",
+      features: [
+        "Infrastructure-free, consumption-based SaaS delivery (no on-prem node management)",
+        "Unified control plane (Helios/Alta) spanning hybrid on-prem and cloud-native workloads",
+        "Alta SaaS Protection for Microsoft 365, Salesforce, and cloud workloads",
+        "Common policy and reporting layer across native Cohesity and NetBackup-protected estates"
+      ],
+      licensing: "Consumption-Based SaaS Subscription (Per TB or Per Workload)"
     },
     {
       id: "fortknox",
@@ -79,31 +99,52 @@ const COHESITY_DATA = {
         "Retrieval-Augmented Generation (RAG) using backup indexes",
         "Secure AI query pipeline keeping all LLM interactions within the corporate firewall",
         "Zero indexing overhead on production systems",
-        "Advanced context grounding to prevent AI hallucinations"
+        "Advanced context grounding to prevent AI hallucinations",
+        "Gaia Catalog: secure gateway exposing governed backup data to agentic AI/NVIDIA AI Enterprise pipelines without data duplication"
       ],
       licensing: "Per Sized Indexed TB Subscription"
     }
   ],
 
   nodeTypes: {
+    // Usable capacities are SE planning estimates (~65-70% of raw, after erasure coding
+    // overhead) - Cohesity does not publish official raw-to-usable ratios. Each family ships
+    // multiple SKUs at different capacity points; one representative mid-tier SKU is used
+    // per family below so the wizard can size against a single number. Always confirm exact
+    // SKU and usable capacity with the Cohesity sizing tool / SE team before quoting.
     physical: [
       {
-        model: "C6200 Flash",
+        id: "cx8000",
+        model: "CX8000 Series (CX8305)",
         tier: "All-Flash Performance",
-        capacityRawTB: 96,
-        capacityUsableTB: 64,
-        media: "NVMe SSD",
-        bestFor: "Fast recovery workloads, critical VMware environments, large databases (SQL, Oracle)",
-        minNodes: 3
+        capacityRawTB: 46.08,
+        capacityUsableTB: 32,
+        media: "All-NVMe (6 NVMe drives/node)",
+        bestFor: "Fastest recovery SLAs, dev/test spin-up, database-heavy environments (SQL, Oracle, SAP HANA), demanding app ecosystems",
+        minNodes: 4, // sold in 4-node blocks
+        skuRange: "CX8205 (23.04TB) / CX8305 (46.08TB) / CX8405 (92.16TB) raw per node"
       },
       {
-        model: "C5000 Hybrid",
+        id: "c6200",
+        model: "C6200 Series (C6216S)",
         tier: "Hybrid Standard",
-        capacityRawTB: 144,
-        capacityUsableTB: 96,
-        media: "SSD Tier + HDD Capacity",
-        bestFor: "Standard enterprise backups, general file archiving, SmartFiles scale-out storage",
-        minNodes: 3
+        capacityRawTB: 204.8,
+        capacityUsableTB: 133,
+        media: "HDD capacity tier + PCIe NVMe flash cache",
+        bestFor: "Standard enterprise backups, backup target consolidation, file and object use cases",
+        minNodes: 3,
+        skuRange: "C6208S (96TB) / C6216S (192TB) / C6224 (288TB) raw HDD per node, plus 6.4-12.8TB PCIe flash cache"
+      },
+      {
+        id: "c5200",
+        model: "C5200 Series (C5224)",
+        tier: "Entry-Level Hybrid",
+        capacityRawTB: 75.2,
+        capacityUsableTB: 49,
+        media: "HDD capacity tier + PCIe flash cache",
+        bestFor: "Smaller enterprise sites, ROBO/edge consolidation, test/dev, budget-constrained deployments",
+        minNodes: 3,
+        skuRange: "C5204 through C5224 (12-72TB raw HDD per node), plus 1.6-3.2TB PCIe flash cache"
       }
     ],
     virtual: [
@@ -282,15 +323,16 @@ const COHESITY_DATA = {
         { text: "Cohesity Federal Government Data Protection Trust", url: "https://www.cohesity.com/solutions/industry/government/" }
       ],
       requirements: [
-        "FIPS 140-2 certified data-at-rest encryption using external KMS key chains",
+        "FIPS 140-3 validated data-at-rest encryption using external KMS key chains",
         "Cohesity FortKnox GovCloud vault storage for secure, air-gapped federal backups",
         "Multi-Party Authorization (MPA) quorum gatekeepers on all administrative changes",
         "Continuous DataHawk ML scanning for malware and indicators of compromise (IOCs)"
       ],
       details: [
-        { part: "SC-28 - Protection of Information at Rest", how: "Satisfied via FIPS 140-2 validated encryption modules coupled with customer-managed cryptographic key chains (KMS)." },
+        { part: "SC-28 - Protection of Information at Rest", how: "Satisfied via FIPS 140-3 validated encryption modules coupled with customer-managed cryptographic key chains (KMS). Note: FIPS 140-2 module validations moved to NIST's Historical list on Sept 21, 2026 — confirm any referenced module carries an Active FIPS 140-3 certificate for new federal procurements." },
         { part: "CP-9 - Information System Backup (GovCloud)", how: "Satisfied via FortKnox AWS GovCloud cloud storage, creating an isolated, air-gapped backup copy." },
-        { part: "AC-3 - Access Control (Quorum Approval)", how: "Satisfied via Multi-Party Authorization (MPA), enforcing a multi-signature gatekeeper rule on federal records deletion." }
+        { part: "AC-3 - Access Control (Quorum Approval)", how: "Satisfied via Multi-Party Authorization (MPA), enforcing a multi-signature gatekeeper rule on federal records deletion." },
+        { part: "Current Authorization Status", how: "Cohesity Cloud Services for Government holds FedRAMP Moderate Authorization (since May 2024). FedRAMP High authorization has not been publicly announced as of this proposal — verify current status on the FedRAMP Marketplace before committing to high-impact federal engagements." }
       ]
     },
     soc2: {

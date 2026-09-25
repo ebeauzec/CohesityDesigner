@@ -67,6 +67,14 @@ class CohesityArchitectWizard {
     return this.state.sites.find(s => s.id === this.state.activeSiteId) || this.state.sites[0];
   }
 
+  getFormattedDate() {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
   getNetworkPorts() {
     const isVmActive = this.state.sites.some(site => site.workloads.vm.active);
     const isDbActive = this.state.sites.some(site => site.workloads.database.active);
@@ -108,7 +116,7 @@ class CohesityArchitectWizard {
 
     const adjusters = [
       { key: "saasTB", label: "DataProtect SaaS ($/TB/yr)" },
-      { key: "physicalNode", label: "C5000/C6200 Node ($/node/yr)" },
+      { key: "physicalNode", label: "Physical Storage Node ($/node/yr)" },
       { key: "dataprotectTB", label: "DataProtect Soft. ($/TB/yr)" },
       { key: "cloudNode", label: "Cloud Virtual Node ($/node/yr)" },
       { key: "fortknoxTB", label: "FortKnox Cloud Vault ($/TB/yr)" },
@@ -258,12 +266,12 @@ class CohesityArchitectWizard {
       .then(r => r.json())
       .then(data => {
         this.state.pricing = { ...this.state.pricing, ...data };
-        console.log("Downloaded live list prices:", this.state.pricing);
+        console.log("Loaded default estimation rates from pricing.json (illustrative only — adjust to your negotiated pricing):", this.state.pricing);
         this.renderPricingAdjuster();
         this.updateUI();
       })
       .catch(err => {
-        console.warn("Failed to download pricing live, using default list:", err);
+        console.warn("Failed to load pricing.json, using built-in default estimates:", err);
         this.renderPricingAdjuster();
         this.updateUI();
       });
@@ -535,11 +543,15 @@ class CohesityArchitectWizard {
     });
 
     this.dom.copyBtn.addEventListener("click", () => {
-      navigator.clipboard.writeText(this.dom.codePre.textContent);
-      this.dom.copyBtn.textContent = "Copied!";
-      setTimeout(() => {
-        this.dom.copyBtn.textContent = "Copy";
-      }, 2000);
+      navigator.clipboard.writeText(this.dom.codePre.textContent).then(() => {
+        this.dom.copyBtn.textContent = "Copied!";
+      }).catch(() => {
+        this.dom.copyBtn.textContent = "Copy failed — select & copy manually";
+      }).finally(() => {
+        setTimeout(() => {
+          this.dom.copyBtn.textContent = "Copy";
+        }, 2000);
+      });
     });
   }
 
@@ -727,26 +739,26 @@ class CohesityArchitectWizard {
     let fortKnoxVaultTB = 0;
     let nodeModelName = "";
 
+    let nodeType = null;
     if (this.state.deployment.model === "saas") {
       nodeRecommendation = "Cohesity Cloud Services (SaaS Pricing model)";
       nodeModelName = "SaaS Storage Subscription";
     } else {
-      // Determine physical nodes layout based on user preferences and Database volumes
+      // Determine physical node family from user preference and Database volumes.
+      // Single source of truth for hardware specs is COHESITY_DATA.nodeTypes.physical.
       const isDatabaseHeavy = (dbActive && (dbCapacity / (totalFrontEndTB || 1) > 0.35));
-      const performanceTier = (this.state.deployment.nodePreference === "flash" || isDatabaseHeavy);
+      const nodePrefToId = { flash: "cx8000", hybrid: "c6200", entry: "c5200" };
+      const nodeTypeId = isDatabaseHeavy ? "cx8000" : (nodePrefToId[this.state.deployment.nodePreference] || "c6200");
 
-      if (performanceTier) {
-        nodeModelName = "C6200 NVMe All-Flash";
-        const nodeUsableTB = 64; // Model usable size
-        // N+1 cluster configuration: needs min 3 nodes, sized to tolerate losing 1 node.
-        localNodeCount = Math.max(3, Math.ceil(calculatedUsableLocalTB / nodeUsableTB) + 1);
-        nodeRecommendation = `${localNodeCount}x Cohesity ${nodeModelName} Nodes (${(localNodeCount * nodeUsableTB).toFixed(0)}TB usable, N+1 Config)`;
-      } else {
-        nodeModelName = "C5000 Hybrid (SSD+HDD)";
-        const nodeUsableTB = 96; // Model usable size
-        localNodeCount = Math.max(3, Math.ceil(calculatedUsableLocalTB / nodeUsableTB) + 1);
-        nodeRecommendation = `${localNodeCount}x Cohesity ${nodeModelName} Nodes (${(localNodeCount * nodeUsableTB).toFixed(0)}TB usable, N+1 Config)`;
-      }
+      nodeType = COHESITY_DATA.nodeTypes.physical.find(n => n.id === nodeTypeId)
+        || COHESITY_DATA.nodeTypes.physical.find(n => n.id === "c6200")
+        || COHESITY_DATA.nodeTypes.physical[0];
+
+      const nodeUsableTB = nodeType.capacityUsableTB;
+      // N+1 cluster configuration: sized to tolerate losing 1 node, floored at the family's minimum node count.
+      localNodeCount = Math.max(nodeType.minNodes, Math.ceil(calculatedUsableLocalTB / nodeUsableTB) + 1);
+      nodeModelName = `${nodeType.model} (${nodeType.tier})`;
+      nodeRecommendation = `${localNodeCount}x Cohesity ${nodeModelName} Nodes (${(localNodeCount * nodeUsableTB).toFixed(0)}TB usable, N+1 Config)`;
     }
 
     // Cloud Node Replication sizing
@@ -755,10 +767,11 @@ class CohesityArchitectWizard {
       cloudNodeCount = Math.max(3, Math.ceil(calculatedUsableLocalTB / cloudNodeUsableTB) + 1);
     }
 
-    // FortKnox vault sizing
+    // FortKnox vault sizing: FortKnox stores an already-deduplicated, immutable copy,
+    // so it's sized off the local usable footprint (dedup + retention adjusted), plus a
+    // 15% buffer for the vault's typically longer/extended immutable retention window.
     if (this.state.security.fortknox) {
-      // Vault sizes: Usually front-end capacity + ~15% for compression/retention.
-      fortKnoxVaultTB = Math.ceil(totalFrontEndTB * 0.9);
+      fortKnoxVaultTB = Math.ceil(calculatedUsableLocalTB * 1.15);
     }
 
     return {
@@ -1027,6 +1040,7 @@ class CohesityArchitectWizard {
     // Check which products are actively selected
     const activeProducts = {
       dataprotect: true, // Always required for backup
+      alta: this.state.deployment.model === "saas" || this.state.deployment.model === "hybrid",
       fortknox: this.state.security.fortknox,
       datahawk: this.state.security.datahawk,
       smartfiles: this.state.workloads.files.active,
@@ -1225,7 +1239,8 @@ class CohesityArchitectWizard {
     const complianceNames = this.state.project.compliance
       .map(c => COHESITY_DATA.complianceFrameworks[c] ? COHESITY_DATA.complianceFrameworks[c].name.split(" ")[0] : c.toUpperCase());
       
-    let summaryText = `This technical architecture proposal outlines the deployment parameters of a Cohesity DataCloud resilient storage cluster sized for <strong>${this.state.project.name}</strong> (Industry: <strong>${this.state.project.industry}</strong>). The design consolidates protection across <strong>${this.state.sites.length} site(s)</strong> (${this.state.sites.map(s => s.name).join(", ")}).<br><br>`;
+    let summaryText = `<span style="color:var(--text-muted); font-size:11px;">${COHESITY_DATA.companyContext}</span><br><br>`;
+    summaryText += `This technical architecture proposal outlines the deployment parameters of a Cohesity DataCloud resilient storage cluster sized for <strong>${this.state.project.name}</strong> (Industry: <strong>${this.state.project.industry}</strong>). The design consolidates protection across <strong>${this.state.sites.length} site(s)</strong> (${this.state.sites.map(s => s.name).join(", ")}).<br><br>`;
     summaryText += `To protect your front-end workload footprint of <strong>${sizing.frontEndTB} TB</strong> (consisting of ${activeWls.join(", ")}), the system establishes an integrated hyperconverged scale-out storage mesh. Compounded over a 3-year growth forecast and adjusted for GFS snapshot retention targets, the calculated usable storage requirement stands at <strong>${sizing.usableLocalTB} TB</strong>.<br><br>`;
     
     if (this.state.deployment.model === "saas") {
@@ -1302,7 +1317,7 @@ class CohesityArchitectWizard {
         <tr style="border-bottom: 1px solid var(--border-color);">
           <td style="padding: 12px; font-weight: 600;">Cohesity ${sizing.nodeModelName} Nodes</td>
           <td style="padding: 12px; text-align: center;">${sizing.localNodeCount} Nodes</td>
-          <td style="padding: 12px; color: var(--text-secondary);">Physical hyperconverged storage nodes (C5000/C6200 hardware subscription)</td>
+          <td style="padding: 12px; color: var(--text-secondary);">Physical hyperconverged storage nodes (${sizing.nodeModelName} hardware subscription)</td>
           <td style="padding: 12px; text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--accent-green);">$${nodeLinePrice.toLocaleString()}</td>
         </tr>
         <tr style="border-bottom: 1px solid var(--border-color);">
@@ -1504,10 +1519,12 @@ COHESITY SOLUTION ARCHITECTURE PROPOSAL
 =========================================
 Project: ${this.state.project.name}
 Sector: ${this.state.project.industry}
-Date: 2026-05-31
+Date: ${this.getFormattedDate()}
 
 1. EXECUTIVE SUMMARY
 ---------------------
+${COHESITY_DATA.companyContext}
+
 This technical architecture proposal outlines the deployment parameters of a Cohesity DataCloud resilient storage cluster. Sized to meet a front-end workload footprint of ${sizing.frontEndTB} TB (consisting of: ${activeWls.join(", ")}), the system establishes an integrated hyperconverged scale-out storage mesh. The design consolidates protection across ${this.state.sites.length} site(s) (${this.state.sites.map(s => s.name).join(", ")}). Compounded over a 3-year growth forecast and adjusted for GFS snapshot retention targets, the calculated usable storage requirement stands at ${sizing.usableLocalTB} TB.
 
 Deployment model: ${this.state.deployment.model.toUpperCase()} Cloud Scenario.
@@ -1647,14 +1664,16 @@ Security checks log:
       text += `- Port: ${p.port.padEnd(10)} | Proto: ${p.proto.padEnd(11)} | Src: ${p.src.padEnd(18)} -> Dest: ${p.dest.padEnd(18)} | Purpose: ${p.desc} | Status: [${p.active ? 'ACTIVE' : 'INACTIVE'}]\n`;
     });
 
-    navigator.clipboard.writeText(text);
-    
-    // Visual button feedback
     const originalText = this.dom.btnCopyProposal.innerHTML;
-    this.dom.btnCopyProposal.innerHTML = `<span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle;">check</span> Proposal Copied!`;
-    setTimeout(() => {
-      this.dom.btnCopyProposal.innerHTML = originalText;
-    }, 2000);
+    navigator.clipboard.writeText(text).then(() => {
+      this.dom.btnCopyProposal.innerHTML = `<span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle;">check</span> Proposal Copied!`;
+    }).catch(() => {
+      this.dom.btnCopyProposal.innerHTML = `<span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle;">error</span> Copy failed — clipboard access denied`;
+    }).finally(() => {
+      setTimeout(() => {
+        this.dom.btnCopyProposal.innerHTML = originalText;
+      }, 2000);
+    });
   }
 
   renderTopologyDiagram() {
@@ -2196,7 +2215,7 @@ Security checks log:
         <tr>
           <td><strong>Cohesity ${sizing.nodeModelName} Nodes</strong></td>
           <td>${sizing.localNodeCount} Nodes</td>
-          <td>Physical hyperconverged storage nodes (hardware subscription)</td>
+          <td>Physical hyperconverged storage nodes (${sizing.nodeModelName} hardware subscription)</td>
           <td style="text-align: right; font-weight: bold; color: #1e7e34;">$${nodeLinePrice.toLocaleString()}</td>
         </tr>
         <tr>
@@ -2273,12 +2292,13 @@ Security checks log:
           </div>
           <div style="text-align: right;">
             <div style="font-weight: bold; font-size: 12pt;">Cohesity Architect Toolkit</div>
-            <div style="font-size: 8pt; color: #888;">Generated: 2026-05-30</div>
+            <div style="font-size: 8pt; color: #888;">Generated: ${this.getFormattedDate()}</div>
           </div>
         </div>
 
         <div class="print-section">
           <h2>1. Executive Summary</h2>
+          <p style="font-size: 8.5pt; color: #777; font-style: italic;">${COHESITY_DATA.companyContext}</p>
           <p>This technical architecture proposal outlines the deployment parameters of a Cohesity DataCloud resilient storage cluster. The design consolidates protection across <strong>${this.state.sites.length} site(s)</strong> (${this.state.sites.map(s => s.name).join(", ")}). Sized to meet a front-end workload footprint of <strong>${sizing.frontEndTB} TB</strong>, the system consolidates backup datasets into an integrated, secure scale-out pool reducing storage overhead through deduplication and compression.</p>
           
           <div class="print-bom-summary">
