@@ -329,6 +329,7 @@ class CohesityArchitectWizard {
 
     // v3 additions: TCO, competitive positioning, as-built export, save/load scenario, SVG export
     this.dom.proposalTCO = document.getElementById("proposal-tco-section");
+    this.dom.proposalRecovery = document.getElementById("proposal-recovery-section");
     this.dom.proposalCompetitive = document.getElementById("proposal-competitive-section");
     this.dom.btnSaveScenario = document.getElementById("btn-save-scenario");
     this.dom.btnLoadScenario = document.getElementById("btn-load-scenario");
@@ -628,6 +629,25 @@ class CohesityArchitectWizard {
       this.setDataHawkState(true);
       this.setCheckboxState("chk-sitecontinuity", true, 'bcdr', 'siteContinuity');
     }
+
+    if (comps.includes("uaepdpl") || comps.includes("ksapdpl")) {
+      this.setDataHawkState(true);
+    }
+
+    if (comps.includes("ksapdpl")) {
+      // Data residency / cross-border transfer controls - keep keys under customer control.
+      const kmsSel = document.getElementById("sec-kms");
+      if (kmsSel) {
+        kmsSel.value = "customer";
+        this.state.security.kms = "customer";
+      }
+    }
+
+    if (comps.includes("ncaecc")) {
+      this.setCheckboxState("chk-fortknox", true, 'security', 'fortknox');
+      this.setCheckboxState("chk-sitecontinuity", true, 'bcdr', 'siteContinuity');
+      this.setCheckboxState("chk-mpa", true, 'security', 'mpa');
+    }
   }
 
   setCheckboxState(elemId, value, stateCategory, stateKey) {
@@ -904,7 +924,8 @@ class CohesityArchitectWizard {
       resiliencyMode,
       deployedUsableTB,
       throughputBound,
-      activeWorkloadsCount
+      activeWorkloadsCount,
+      nodeType
     };
   }
 
@@ -967,6 +988,134 @@ class CohesityArchitectWizard {
       replHours,
       vaultHours
     };
+  }
+
+  // Answers the three questions customers actually ask in a recovery conversation:
+  // how long will it take, what point-in-time copy do I get back, and what does the
+  // environment look like afterward. All figures are SE planning estimates derived from
+  // the same throughput/bandwidth assumptions used elsewhere in the sizing engine - not
+  // a guaranteed SLA. See sizeNodesForCapacity()/calculateBandwidth() for the underlying
+  // per-node throughput and link-bandwidth assumptions.
+  formatDuration(hours) {
+    if (hours < 1) return `${Math.max(1, Math.ceil(hours * 60))} min`;
+    if (hours < 48) return `${hours.toFixed(1)} hours`;
+    return `${(hours / 24).toFixed(1)} days`;
+  }
+
+  calculateRecoveryTime() {
+    const sizing = this.calculateSizing();
+    const bw = this.calculateBandwidth();
+
+    const maxWindowHours = Math.max(1, ...this.state.sites.flatMap(site =>
+      Object.values(site.workloads).filter(w => w.active).map(w => w.windowHours || 8)
+    ));
+    const cdpActive = !!(this.state.bcdr.siteContinuity && this.state.bcdr.rpo === "15min");
+    const cleanScan = !!this.state.security.datahawk;
+
+    const rpoText = cdpActive
+      ? "Near-zero data loss (continuous CDP journaling via SiteContinuity)"
+      : `Up to ${maxWindowHours}h of data loss (the gap since the last completed backup of the slowest-scheduled active workload)`;
+
+    const pointInTimeNote = cleanScan
+      ? "the most recent snapshot verified free of ransomware/anomaly indicators (Threat Defense & Data Classification)"
+      : "the most recent completed snapshot — not malware-scanned before recovery (enable Threat Defense & Data Classification to change this)";
+
+    const scenarios = [];
+
+    // 1. Single workload instant recovery - SnapFS mounts the backup directly as a live
+    // volume, so time-to-usable is independent of data size.
+    scenarios.push({
+      id: "instant",
+      name: "Single VM / File / App Instant Recovery",
+      rtoText: "Minutes, regardless of data size",
+      detail: "Cohesity SnapFS mounts the backup directly as a live read/write volume (Instant Mass Restore) — no block-level copy has to complete before the workload is usable again.",
+      whatYouGetBack: `You get back ${pointInTimeNote}.`,
+      endState: "Restored in place, running on the original cluster/site from the mounted snapshot (an optional background migration moves it onto primary storage afterward)."
+    });
+
+    // 2. Full local bulk restore - bound by aggregate N+1 cluster restore throughput,
+    // the same conservative per-node estThroughputMBps assumption used by the ingest
+    // throughput check in calculateSizing().
+    if (this.state.deployment.model === "saas") {
+      scenarios.push({
+        id: "bulk",
+        name: "Full SaaS-Managed Bulk Restore",
+        rtoText: "Bound by Cohesity's SaaS-managed infrastructure, not a customer-sized cluster",
+        detail: "Capacity and throughput for this path are fully managed by Cohesity Cloud Services. Get a current RTO figure from your Cohesity account team for this deployment model.",
+        whatYouGetBack: `You get back ${pointInTimeNote}.`,
+        endState: "Restored into the same SaaS-managed environment."
+      });
+    } else if (sizing.nodeType && sizing.nodeType.estThroughputMBps && sizing.localNodeCount > 1) {
+      const aggregateMBps = (sizing.localNodeCount - 1) * sizing.nodeType.estThroughputMBps;
+      const hours = (sizing.usableLocalTBRaw * 1000000) / (aggregateMBps * 3600);
+      scenarios.push({
+        id: "bulk",
+        name: `Full Local Bulk Restore (${sizing.usableLocalTB} TB)`,
+        rtoText: `~${this.formatDuration(hours)} (N+1 cluster throughput: ~${aggregateMBps} MB/s)`,
+        detail: "A full-cluster rebuild or mass restore of every protected workload at once, bound by aggregate cluster restore throughput rather than instant-mount.",
+        whatYouGetBack: `You get back ${pointInTimeNote}, for every protected workload.`,
+        endState: "Restored in place on the local cluster — the original environment, not a failover. No failback step needed afterward."
+      });
+    }
+
+    // 3. DR failover to a live secondary - orchestration-bound (not data-transfer-bound)
+    // when SiteContinuity automates it; otherwise a manual runbook estimate.
+    if (this.state.bcdr.replication === "second-site" || this.state.bcdr.replication === "cloud-edition") {
+      const automated = !!this.state.bcdr.siteContinuity;
+      const targetName = this.state.bcdr.replication === "cloud-edition" ? "Cloud Edition" : "Secondary Site";
+      scenarios.push({
+        id: "failover",
+        name: `DR Failover to ${targetName}`,
+        rtoText: automated ? "~15-30 min (automated orchestration)" : "~2-6 hours (manual runbook execution — enable SiteContinuity to automate this)",
+        detail: automated
+          ? "SiteContinuity automates boot-order sequencing, network cutover, and health checks against an already-current replica — failover time is orchestration-bound, not data-transfer-bound."
+          : "Without SiteContinuity, failover is a manual runbook: engineers power on replicated VMs, remap networking, and validate application health by hand.",
+        whatYouGetBack: `You get back ${rpoText.charAt(0).toLowerCase()}${rpoText.slice(1)}.`,
+        endState: `Running on the ${targetName.toLowerCase()} — failback to the primary site/cluster is a separate, planned step once it's repaired, not automatic.`
+      });
+    }
+
+    // 4. FortKnox vault recovery - the ransomware worst-case: primary and local
+    // replicas are assumed compromised or unavailable, so retrieval crosses the
+    // internet via the vault's outbound-only link rather than the local backplane.
+    // Reuses the same egress-bandwidth assumption as the vault's 4h sync SLA.
+    if (this.state.security.fortknox && sizing.fortKnoxVaultTB > 0 && bw.vaultMbps > 0) {
+      const hours = (sizing.fortKnoxVaultTB * 8000000) / (bw.vaultMbps * 3600);
+      scenarios.push({
+        id: "vault",
+        name: `FortKnox Cyber Vault Recovery (${sizing.fortKnoxVaultTB} TB)`,
+        rtoText: `~${this.formatDuration(hours)} (bound by the vault's cloud egress link, assumed at the same ${bw.vaultMbps} Mbps as its sync SLA)`,
+        detail: "The slowest realistic recovery path by design — the vault is virtually air-gapped behind an outbound-only connection, so retrieval crosses the internet rather than the local cluster backplane. This is the ransomware worst-case scenario.",
+        whatYouGetBack: "You get back the last clean, immutable snapshot in the vault, via Assisted Recovery.",
+        endState: "Recovered first into an isolated cleanroom for verification, then moved to production or a DR site once confirmed clean — not restored directly in place."
+      });
+    }
+
+    return { scenarios, rpoText, maxWindowHours, cdpActive, cleanScan };
+  }
+
+  updateRecoveryUI() {
+    const recoveryRpoSummary = document.getElementById("recovery-rpo-summary");
+    const recoveryList = document.getElementById("recovery-scenarios-list");
+    if (!recoveryRpoSummary || !recoveryList) return;
+
+    const recovery = this.calculateRecoveryTime();
+
+    recoveryRpoSummary.innerHTML = `<strong style="color:var(--text-primary)">What do I get back?</strong> ${recovery.rpoText}. ${
+      recovery.cleanScan
+        ? "Recovered snapshots are malware-scanned before they're offered for recovery (Threat Defense & Data Classification)."
+        : "Recovered snapshots are not malware-scanned before recovery — enable Threat Defense & Data Classification (Security step) for a verified-clean recovery point."
+    }`;
+
+    recoveryList.innerHTML = recovery.scenarios.map(s => `
+      <div style="background:rgba(255,255,255,0.02); padding:12px; border-radius:8px; border:1px solid var(--border-color);">
+        <div style="font-size:11.5px; font-weight:700; color:var(--text-primary); margin-bottom:4px;">${s.name}</div>
+        <div style="font-size:13px; font-weight:700; color:var(--accent-green); font-family:var(--font-mono); margin-bottom:6px;">${s.rtoText}</div>
+        <div style="font-size:10.5px; color:var(--text-secondary); line-height:1.4; margin-bottom:6px;">${s.detail}</div>
+        <div style="font-size:10.5px; color:var(--text-secondary); line-height:1.4; margin-bottom:4px;">${s.whatYouGetBack}</div>
+        <div style="font-size:10.5px; color:var(--text-secondary); line-height:1.4; margin-bottom:4px;"><strong style="color:var(--text-primary)">End state:</strong> ${s.endState}</div>
+      </div>
+    `).join("");
   }
 
   updateBandwidthUI() {
@@ -1169,6 +1318,11 @@ class CohesityArchitectWizard {
 
     // Render Hardening checklist items
     this.updateChecklist(compliance);
+
+    // Keep the bandwidth and recovery-expectations widgets live on every change,
+    // not just on the initial render.
+    this.updateBandwidthUI();
+    this.updateRecoveryUI();
   }
 
   updateProductList(sizing) {
@@ -1392,6 +1546,36 @@ class CohesityArchitectWizard {
     `;
   }
 
+  renderRecoveryExpectations() {
+    if (!this.dom.proposalRecovery) return;
+    const recovery = this.calculateRecoveryTime();
+    this.dom.proposalRecovery.innerHTML = `
+      <h3 style="font-size:15px; color:var(--accent-green); margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+        <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">restore</span>
+        Recovery Expectations
+      </h3>
+      <p style="font-size:11px; color:var(--text-muted); margin:0 0 10px 0; line-height:1.4;">SE planning estimates computed from this configuration's actual throughput and bandwidth assumptions — not a guaranteed SLA. Answers the three questions customers ask in a recovery conversation: how long, what you get back, and what the environment looks like afterward.</p>
+      <div style="background:rgba(255,255,255,0.03); padding:10px 12px; border-radius:8px; border:1px solid var(--border-color); margin-bottom:14px; font-size:11.5px; color:var(--text-secondary); line-height:1.5;">
+        <strong style="color:var(--text-primary)">What do I get back?</strong> ${recovery.rpoText}. ${
+          recovery.cleanScan
+            ? "Recovered snapshots are malware-scanned before they're offered for recovery (Threat Defense &amp; Data Classification)."
+            : "Recovered snapshots are not malware-scanned before recovery — enable Threat Defense &amp; Data Classification for a verified-clean recovery point."
+        }
+      </div>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        ${recovery.scenarios.map(s => `
+          <div style="background:rgba(255,255,255,0.02); padding:12px; border-radius:8px; border:1px solid var(--border-color);">
+            <div style="font-size:12px; font-weight:700; color:var(--text-primary); margin-bottom:4px;">${s.name}</div>
+            <div style="font-size:14px; font-weight:700; color:var(--accent-green); font-family:var(--font-mono); margin-bottom:6px;">${s.rtoText}</div>
+            <div style="font-size:11px; color:var(--text-secondary); line-height:1.4; margin-bottom:6px;">${s.detail}</div>
+            <div style="font-size:11px; color:var(--text-secondary); line-height:1.4; margin-bottom:4px;">${s.whatYouGetBack}</div>
+            <div style="font-size:11px; color:var(--text-secondary); line-height:1.4;"><strong style="color:var(--text-primary)">End state:</strong> ${s.endState}</div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
   renderCompetitivePositioning() {
     if (!this.dom.proposalCompetitive) return;
     this.dom.proposalCompetitive.innerHTML = COHESITY_DATA.competitivePositioning.map(c => `
@@ -1535,22 +1719,29 @@ sales proposal (see "Copy Proposal Text" for that).
     text += `\n5. BANDWIDTH SIZING\n--------------------\n`;
     text += `Daily Change (raw): ${bw.dailyChangeRawTB} TB/day\nDaily Change (deduplicated): ${bw.dailyChangeDedupeTB} TB/day\nIngest Bandwidth: ${bw.ingestDedupeMbps} Mbps (${bw.ingestDedupeMBs} MB/s)\n`;
 
-    text += `\n6. PRICING SNAPSHOT (rates in effect when this document was generated)\n------------------------------------------------------------------------\n`;
+    const recovery = this.calculateRecoveryTime();
+    text += `\n6. RECOVERY EXPECTATIONS (SE planning estimates, not a guaranteed SLA)\n-------------------------------------------------------------------------\n`;
+    text += `What you get back: ${recovery.rpoText}. ${recovery.cleanScan ? "Snapshots are malware-scanned before recovery (Threat Defense & Data Classification)." : "Snapshots are not malware-scanned before recovery."}\n\n`;
+    recovery.scenarios.forEach(s => {
+      text += `  - ${s.name}\n    How long: ${s.rtoText}\n    What you get back: ${s.whatYouGetBack}\n    End state: ${s.endState}\n`;
+    });
+
+    text += `\n7. PRICING SNAPSHOT (rates in effect when this document was generated)\n------------------------------------------------------------------------\n`;
     Object.keys(this.state.pricing).forEach(k => {
       text += `  ${k}: $${this.state.pricing[k].toLocaleString()}\n`;
     });
 
-    text += `\n7. COMPLIANCE FRAMEWORKS SELECTED\n-----------------------------------\n`;
+    text += `\n8. COMPLIANCE FRAMEWORKS SELECTED\n-----------------------------------\n`;
     text += (this.state.project.compliance && this.state.project.compliance.length > 0)
       ? this.state.project.compliance.map(c => COHESITY_DATA.complianceFrameworks[c] ? COHESITY_DATA.complianceFrameworks[c].name : c).join(", ") + "\n"
       : "None selected.\n";
 
-    text += `\n8. CLUSTER-INTERNAL NETWORK PREREQUISITES\n-------------------------------------------\n`;
+    text += `\n9. CLUSTER-INTERNAL NETWORK PREREQUISITES\n-------------------------------------------\n`;
     COHESITY_DATA.clusterNetworkRequirements.forEach(req => {
       text += `  - ${req.item}: ${req.detail}\n`;
     });
 
-    text += `\n9. FIREWALL / TCP PORT REQUIREMENTS\n-------------------------------------\n`;
+    text += `\n10. FIREWALL / TCP PORT REQUIREMENTS\n-------------------------------------\n`;
     this.getNetworkPorts().forEach(p => {
       text += `  - ${p.port} (${p.proto}) ${p.src} -> ${p.dest}: ${p.desc} [${p.active ? "ACTIVE" : "inactive"}]\n`;
     });
@@ -1567,10 +1758,9 @@ sales proposal (see "Copy Proposal Text" for that).
   }
 
   updateUI() {
-    this.updateSidebarStats();
+    this.updateSidebarStats(); // also refreshes the bandwidth and recovery-expectations widgets
     this.renderTopologyDiagram();
-    this.updateBandwidthUI();
-    
+
     // Initialise code panel default to active tab
     const activeTab = document.querySelector(".tab-btn.active").getAttribute("data-tab");
     this.updateIntegrationCode(activeTab);
@@ -1861,8 +2051,9 @@ sales proposal (see "Copy Proposal Text" for that).
       }
     }
 
-    // 5. TCO/consolidation value and competitive positioning
+    // 5. TCO/consolidation value, recovery expectations, and competitive positioning
     this.renderTCO();
+    this.renderRecoveryExpectations();
     this.renderCompetitivePositioning();
   }
 
@@ -1925,6 +2116,13 @@ Recommended primary cluster configuration: ${sizing.nodeRecommendation}.
     if (this.state.bcdr.replication === "second-site" || this.state.bcdr.replication === "cloud-edition") {
       text += `- Secondary Replication Link (4h SLA): ${bandwidths.replMbps} Mbps (${bandwidths.replMBs} MB/s)\n`;
     }
+
+    const recovery = this.calculateRecoveryTime();
+    text += `\nRecovery Expectations (SE planning estimates, not a guaranteed SLA):\n`;
+    text += `- What you get back: ${recovery.rpoText}. ${recovery.cleanScan ? "Snapshots are malware-scanned before recovery (Threat Defense & Data Classification)." : "Snapshots are not malware-scanned before recovery."}\n`;
+    recovery.scenarios.forEach(s => {
+      text += `- ${s.name}: ${s.rtoText} — ${s.whatYouGetBack} — ${s.endState}\n`;
+    });
 
     text += `
 2. BILL OF MATERIALS (BOM) & PRICING
@@ -2429,6 +2627,7 @@ Security checks log:
     const sizing = this.calculateSizing();
     const compliance = this.calculateComplianceScore();
     const tcoForPrint = this.calculateTCO();
+    const recoveryForPrint = this.calculateRecoveryTime();
 
     // Renders structural data inside the print section
     let workloadsHTML = "";
@@ -2761,6 +2960,32 @@ Security checks log:
               <div class="print-bom-val" style="color:#00d68f">$${Math.round(tcoForPrint.avoidedCostUSD).toLocaleString()}</div>
             </div>
           </div>
+        </div>
+
+        <div class="print-section">
+          <h2>3b. Recovery Expectations</h2>
+          <p style="font-size: 8pt; color: #888;">SE planning estimates computed from this configuration's throughput and bandwidth assumptions — not a guaranteed SLA.</p>
+          <p style="margin-bottom: 10px;"><strong>What you get back:</strong> ${recoveryForPrint.rpoText}. ${recoveryForPrint.cleanScan ? "Snapshots are malware-scanned before recovery (Threat Defense &amp; Data Classification)." : "Snapshots are not malware-scanned before recovery."}</p>
+          <table class="print-table">
+            <thead>
+              <tr>
+                <th>Recovery Scenario</th>
+                <th>How Long (RTO)</th>
+                <th>What You Get Back</th>
+                <th>End State</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${recoveryForPrint.scenarios.map(s => `
+                <tr>
+                  <td><strong>${s.name}</strong></td>
+                  <td>${s.rtoText}</td>
+                  <td>${s.whatYouGetBack}</td>
+                  <td>${s.endState}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
         </div>
       </div>
 

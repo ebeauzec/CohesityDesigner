@@ -6,7 +6,7 @@
   <title>Cohesity Solution Architect Wizard</title>
   
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="style.css?v=16">
+  <link rel="stylesheet" href="style.css?v=17">
   
   <!-- Google Material Symbols (Icons) -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
@@ -115,7 +115,7 @@
               Compliance Directives Required
               <span class="tooltip-container">
                 <span class="material-symbols-outlined tooltip-icon">info</span>
-                <span class="tooltip-text">Directives automatically recommend architectural features: e.g., DORA forces SiteContinuity; FedRAMP enforces Customer KMS; CCPA/GDPR require DataHawk discovery.</span>
+                <span class="tooltip-text">Directives automatically recommend architectural features: e.g., DORA forces SiteContinuity; FedRAMP enforces Customer KMS; CCPA/GDPR/UAE PDPL/Saudi PDPL require DataHawk discovery; Saudi ECC-2 forces FortKnox + SiteContinuity + MPA.</span>
               </span>
             </label>
             <div class="selector-grid">
@@ -158,6 +158,21 @@
                 <input type="checkbox" class="compliance-chk" value="ccpa" style="display:none;">
                 <span class="selectable-item-title">CCPA / CPRA Privacy</span>
                 <span class="selectable-item-desc">Enforces customer PII scanning (DataHawk) and automated keys rotation.</span>
+              </label>
+              <label class="selectable-item" style="cursor: pointer;">
+                <input type="checkbox" class="compliance-chk" value="uaepdpl" style="display:none;">
+                <span class="selectable-item-title">UAE PDPL</span>
+                <span class="selectable-item-desc">Federal Decree-Law 45/2021. Requires breach notification evidence and PII discovery (DataHawk).</span>
+              </label>
+              <label class="selectable-item" style="cursor: pointer;">
+                <input type="checkbox" class="compliance-chk" value="ksapdpl" style="display:none;">
+                <span class="selectable-item-title">Saudi PDPL</span>
+                <span class="selectable-item-desc">Requires PII discovery and in-region data residency controls (Customer KMS).</span>
+              </label>
+              <label class="selectable-item" style="cursor: pointer;">
+                <input type="checkbox" class="compliance-chk" value="ncaecc" style="display:none;">
+                <span class="selectable-item-title">Saudi ECC-2:2024</span>
+                <span class="selectable-item-desc">Essential Cybersecurity Controls. Forces FortKnox vaulting, SiteContinuity DR testing, and MPA.</span>
               </label>
             </div>
           </div>
@@ -491,6 +506,29 @@
               💡 <strong>SE Architect Tip:</strong> Cohesity's source-side deduplication (using the Cohesity Agent or direct hypervisor API integration) transmits only unique, compressed change blocks, significantly reducing network requirements compared to legacy backups.
             </div>
           </div>
+
+          <!-- Recovery Expectations inside Step 3 -->
+          <div class="glass-card" style="margin-top: 20px; padding: 16px; border: 1px solid var(--border-color); background: rgba(255, 255, 255, 0.01);">
+            <h4 style="display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:13.5px; color:var(--text-primary);">
+              <span class="material-symbols-outlined" style="color:var(--accent-green)">restore</span>
+              Recovery Expectations
+              <span class="tooltip-container">
+                <span class="material-symbols-outlined tooltip-icon">info</span>
+                <span class="tooltip-text">Answers the three questions a customer actually asks: how long will recovery take, what point-in-time copy do I get back, and what does the environment look like afterward — computed from this configuration, not the RPO/RTO targets above.</span>
+              </span>
+            </h4>
+            <p style="font-size:11.5px; color:var(--text-secondary); margin-bottom:14px; line-height:1.4;">
+              What this sizing would actually deliver per recovery scenario — not the targets selected above, but the computed result:
+            </p>
+
+            <div id="recovery-rpo-summary" style="background:rgba(255,255,255,0.02); padding:12px; border-radius:8px; border:1px solid var(--border-color); margin-bottom:14px; font-size:11.5px; color:var(--text-secondary); line-height:1.5;">
+              <!-- populated by updateRecoveryUI() -->
+            </div>
+
+            <div id="recovery-scenarios-list" style="display:flex; flex-direction:column; gap:10px;">
+              <!-- scenario cards populated by updateRecoveryUI() -->
+            </div>
+          </div>
         </div>
 
         <!-- WIZARD STEP 4: Cyber Resilience Security -->
@@ -690,6 +728,11 @@
             <!-- Consolidation Value / TCO Estimate -->
             <div id="proposal-tco-section" class="glass-card" style="background:rgba(255,255,255,0.02); padding:20px; border-radius:12px; border:1px solid var(--border-color);">
               <!-- Generated dynamically by renderTCO() -->
+            </div>
+
+            <!-- Recovery Expectations -->
+            <div id="proposal-recovery-section" class="glass-card" style="background:rgba(255,255,255,0.02); padding:20px; border-radius:12px; border:1px solid var(--border-color);">
+              <!-- Generated dynamically by renderRecoveryExpectations() -->
             </div>
 
             <!-- Data Governance & Regulatory Compliance Mapping -->
@@ -963,7 +1006,7 @@
   </div>
 
   <!-- Javascript Logic Files -->
-  <script src="data.js?v=16"></script>
-  <script src="app.js?v=16"></script>
+  <script src="data.js?v=17"></script>
+  <script src="app.js?v=17"></script>
 </body>
 </html>

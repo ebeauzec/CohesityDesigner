@@ -401,6 +401,60 @@ const COHESITY_DATA = {
         { part: "Cal. Civ. Code § 1798.105 - Right to Delete", how: "Satisfied via DataHawk automated classification scanning, locating sensitive California consumer records (SSN, credit card, drivers license) inside historical backups." },
         { part: "Cal. Civ. Code § 1798.100 - General Duty of Security", how: "Satisfied via multi-party quorum approvals (MPA) preventing malicious deletion of databases containing private consumer statistics." }
       ]
+    },
+    uaepdpl: {
+      name: "UAE PDPL (Federal Decree-Law No. 45/2021)",
+      links: [
+        { text: "UAE Federal Decree-Law No. 45 of 2021 (Official Legislation Portal)", url: "https://uaelegislation.gov.ae/en/legislations/1972" },
+        { text: "Cohesity Middle East Data Protection & Sovereignty Solutions", url: "https://www.cohesity.com/solutions/compliance/" }
+      ],
+      requirements: [
+        "Breach notification to the regulator and affected individuals",
+        "Data Protection Officer appointment for higher-risk processing",
+        "Honoring data-subject access, correction, deletion, and portability requests",
+        "Controls on cross-border data transfer approval"
+      ],
+      details: [
+        { part: "Article 9 - Personal Data Breach Notification", how: "Satisfied via Helios immutable audit logging and anomaly detection surfacing exactly when and what data was affected, supporting timely breach assessment and regulatory notification." },
+        { part: "Articles 7-8 - Controller/Processor Security Obligations", how: "Satisfied via AES-256 encryption at rest and in transit, plus DataLock WORM immutability protecting personal data against unauthorized alteration or loss." },
+        { part: "Data Subject Rights (Access, Correction, Erasure, Portability)", how: "Satisfied via Threat Defense & Data Classification (Enterprise Edition) scanning backups to locate and act on a specific individual's personal data across unstructured and structured estates. Note: separate DIFC and ADGM financial free-zone data protection regimes apply outside mainland UAE — confirm which regime applies before quoting." }
+      ]
+    },
+    ksapdpl: {
+      name: "Saudi PDPL",
+      links: [
+        { text: "Saudi Arabia Personal Data Protection Law (PDPL) - Official Text", url: "https://sdaia.gov.sa/en/SDAIA/about/Pages/Regulations.aspx" },
+        { text: "Cohesity Middle East Data Protection & Sovereignty Solutions", url: "https://www.cohesity.com/solutions/compliance/" }
+      ],
+      requirements: [
+        "Lawful basis and consent management for personal data processing",
+        "Breach notification to the regulator and, where harm is likely, affected individuals",
+        "Data localization / restricted cross-border transfer controls, pending a published adequacy list",
+        "Accreditation readiness for controllers and processors"
+      ],
+      details: [
+        { part: "Breach Notification Obligations", how: "Satisfied via Helios immutable audit logging and FortKnox-isolated vault copies, giving a verifiable, tamper-evident record to support regulatory breach notification requirements." },
+        { part: "Cross-Border Transfer / Data Residency Controls", how: "Satisfied by deploying Cohesity on physical nodes in-Kingdom or in a customer-controlled in-region cloud, keeping personal data under the controller's chosen jurisdiction rather than a vendor-managed multi-region SaaS default. A formal cross-border adequacy list has not yet been published — verify current guidance before committing to a transfer architecture." },
+        { part: "Security Safeguards (Technical & Organizational Measures)", how: "Satisfied via AES-256 encryption, Multi-Party Authorization (MPA) on deletion, and customer-managed KMS, meeting the law's required technical and organizational security measures." }
+      ]
+    },
+    ncaecc: {
+      name: "Saudi Essential Cybersecurity Controls (ECC-2:2024)",
+      links: [
+        { text: "Essential Cybersecurity Controls (ECC-2:2024) - Official Text", url: "https://nca.gov.sa/en/legislation" },
+        { text: "Cohesity Middle East Cyber Resilience Solutions", url: "https://www.cohesity.com/solutions/compliance/" }
+      ],
+      requirements: [
+        "Backup and recovery management: regular, tested, and isolated backup copies",
+        "Business continuity and disaster recovery testing",
+        "Resilience against ransomware and destructive cyberattacks",
+        "Data localization / in-Kingdom storage controls where applicable"
+      ],
+      details: [
+        { part: "Backup and Recovery Management Subdomain", how: "Satisfied via FortKnox virtually air-gapped cyber vaulting and DataLock WORM immutability, giving an isolated, tested, and tamper-proof backup copy distinct from the primary production environment." },
+        { part: "Business Continuity & Disaster Recovery Testing", how: "Satisfied via SiteContinuity non-disruptive sandbox DR testing, producing the periodic restoration-test evidence this control calls for." },
+        { part: "Cybersecurity Resilience Against Ransomware", how: "Satisfied via Threat Defense & Data Classification (Enterprise Edition) anomaly detection plus Multi-Party Authorization (MPA), reducing the risk of a single compromised credential deleting recoverable backups. Note: guidance on in-Kingdom backup storage is contested between sources — confirm current localization requirements before committing to an architecture." }
+      ]
     }
   },
 

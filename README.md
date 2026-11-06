@@ -1,6 +1,6 @@
 # Cohesity Architect Toolkit
 
-[![Version](https://img.shields.io/badge/version-3.0.0-0066cc)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-3.1.0-0066cc)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Proprietary-red)](LICENSE)
 [![Runtime](https://img.shields.io/badge/runtime-HTML%2FJS%2C%20no%20build-3776AB)]()
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)]()
@@ -50,7 +50,8 @@ Cohesity's own sizing tools and SE resources are excellent for validating a fina
 
 | Gap in a manual spreadsheet | What the Architect Toolkit does |
 |---|---|
-| **No compliance-to-architecture mapping** — you know GDPR matters, but not which specific Cohesity feature satisfies which article | **Eight compliance frameworks** (GDPR, HIPAA, PCI-DSS v4.0, NIS2, DORA, FedRAMP, SOC 2, CCPA/CPRA) mapped clause-by-clause to the specific Cohesity capability that satisfies it, with official regulator + Cohesity solution-brief links |
+| **No compliance-to-architecture mapping** — you know GDPR matters, but not which specific Cohesity feature satisfies which article | **Eleven compliance frameworks** (GDPR, HIPAA, PCI-DSS v4.0, NIS2, DORA, FedRAMP, SOC 2, CCPA/CPRA, UAE PDPL, Saudi PDPL, Saudi ECC-2:2024) mapped clause-by-clause to the specific Cohesity capability that satisfies it, with official regulator + Cohesity solution-brief links |
+| **"How long will it take to get my data back?"** — the first question after sizing, and a spreadsheet has no answer | **Recovery Expectations panel** — computes actual RTO per scenario (instant mount, full bulk restore, DR failover, FortKnox vault recovery), the real RPO/data-loss window, and the post-recovery end state, from the same throughput model used for sizing |
 | **Bandwidth is an afterthought** — sizing tools give you capacity, not the WAN link you need | **Live bandwidth model** — daily change rate, raw vs. deduplicated ingest, replication link, and FortKnox vault sync, all driven by each workload's own backup window and dedupe ratio |
 | **Node sizing is a guess** — "probably 4 or 5 nodes" | **N+1 cluster math against real hardware families** — CX8000 (all-flash), C6200 (hybrid), C5200 (entry/ROBO) — with the family's own minimum node count and usable capacity, not a flat guess |
 | **Multi-site scoping means multiple spreadsheets** | **Native multi-site model** — add, rename, and remove sites; each with its own workload mix; sizing, bandwidth, and the topology diagram all roll up automatically |
@@ -86,7 +87,8 @@ In one pass through the six-step wizard, the tool produces a complete, internall
 **Reference content built in:**
 - Six Cohesity product profiles (DataProtect, Alta, FortKnox, Threat Defense/Enterprise Edition, SmartFiles, SiteContinuity, Gaia) with taglines, feature lists, and licensing models
 - Three physical hardware families (CX8000 all-flash, C6200 hybrid, C5200 entry/ROBO) with real current-generation SKU ranges
-- Eight compliance frameworks with clause-level architecture mappings and official reference links
+- Eleven compliance frameworks with clause-level architecture mappings and official reference links, including UAE PDPL, Saudi PDPL, and Saudi ECC-2:2024
+- A **Recovery Expectations** panel answering "how long," "what do I get back," and "what's the end state" across four recovery scenarios (instant mount, full bulk restore, DR failover, FortKnox vault recovery)
 - Four integration playbooks (Splunk SIEM, ServiceNow REST, SiteContinuity DR runbook YAML, Ansible bootstrap) with values auto-substituted from your project
 - A dynamic firewall/TCP port reference, filtered to what your configuration actually requires, plus **cluster-internal network prerequisites** (IPMI, node VIPs, L2/LACP/jumbo frames) that a port table alone doesn't cover
 - **Competitive positioning notes** (vs. Veeam, Rubrik, Commvault, legacy NetBackup estates) and a downloadable **As-Built/handover document** capturing the exact configuration a proposal was sized against
@@ -221,6 +223,8 @@ Add, rename, and remove sites from the **Configure Target Sites / Data Centers**
 ### Step 3 — Resilience
 
 Target RPO/RTO selection, replication mode (none / second site / Cloud Edition / FortKnox SaaS vault), and the SiteContinuity DR orchestrator toggle. The sidebar's bandwidth panel breaks out daily change rate, ingest bandwidth (raw and deduplicated), replication bandwidth, and FortKnox vault sync bandwidth — each computed from the actual per-workload backup windows set in Step 2.
+
+Below that, the **Recovery Expectations** panel answers the three questions a customer actually asks about recovery — not the RPO/RTO *targets* selected above, but what this specific sizing would actually deliver: how long each of four recovery scenarios takes (instant mount, full bulk restore, DR failover, FortKnox vault recovery), what point-in-time copy comes back and whether it's malware-scanned, and what the environment looks like once recovery completes (restored in place vs. running on DR/cloud infra pending failback vs. recovered into an isolated cleanroom). See [Recovery Time Estimate](#recovery-time-estimate) for the formulas.
 
 <p align="center">
   <img src="docs/images/03-resilience-bandwidth.png" alt="Resilience step showing RPO/RTO targets and the live bandwidth dashboard with daily change rate, local backup ingest, and FortKnox cloud vault bandwidth figures" width="820">
@@ -395,6 +399,21 @@ Distinct from the external firewall port table (`getNetworkPorts()`), sourced fr
 | LACP-aggregated NICs per node | Combined throughput and NIC-level fault tolerance (typically 2× 10/25GbE+) |
 | Jumbo frames (MTU 9000) end-to-end on the cluster-interconnect/replication path | Reduces CPU overhead, improves inter-node replication/rebalancing throughput |
 
+### Recovery Time Estimate
+
+> This section documents `calculateRecoveryTime()` in `app.js` — the formulas behind the **Recovery Expectations** panel (Resilience step, Proposal step, As-Built document, and clipboard/print exports). Like the throughput figures in [Node Hardware Reference](#node-hardware-reference), these are SE planning estimates derived from the same sizing model, not a guaranteed SLA.
+
+Four recovery scenarios are computed, each shown only when it applies to the current configuration:
+
+| Scenario | Formula | Shown when |
+|---|---|---|
+| **Single-workload instant recovery** | Fixed: minutes, independent of data size | Always — Cohesity SnapFS mounts the backup directly as a live volume (Instant Mass Restore) |
+| **Full local bulk restore** | `hours = usableLocalTB × 1,000,000 / ((nodeCount - 1) × estThroughputMBps × 3600)` | Non-SaaS deployments — uses the same N+1 and `estThroughputMBps` assumptions as the ingest throughput check in `sizeNodesForCapacity()` |
+| **DR failover** | Fixed: ~15–30 min (automated, SiteContinuity on) or ~2–6 hours (manual runbook, SiteContinuity off) | Replication mode is second-site or Cloud Edition |
+| **FortKnox vault recovery** | `hours = fortKnoxVaultTB × 8,000,000 / (vaultMbps × 3600)` | FortKnox is enabled — reuses the same vault sync bandwidth (`vaultMbps`, a fixed 4-hour-window assumption) as the egress link for retrieval, since it's the same outbound-only connection |
+
+Each scenario also reports **what you get back** — the recovered data's point-in-time (near-zero if SiteContinuity + a 15-minute RPO target are both configured, otherwise up to the longest active workload's backup window) and whether the snapshot was malware-scanned before being offered for recovery (Threat Defense & Data Classification) — and **the end state**: restored in place, running on DR/cloud infrastructure pending a separate failback step, or recovered into an isolated cleanroom pending validated promotion to production. The FortKnox vault path is deliberately the slowest of the four — it's the ransomware worst case, where primary and local replicas are assumed compromised or unavailable.
+
 ---
 
 ## 7. Bill of Materials & Pricing
@@ -433,8 +452,15 @@ Each framework below is available as a checkbox on the **Project** step. Checkin
 | **FedRAMP** | US federal | FIPS 140-3 validated encryption (140-2 sunset Sept 21, 2026), FortKnox GovCloud, MPA quorum — see note below |
 | **SOC 2 Type II** | Trust services audit | Helios MFA, immutable audit logs, DataLock WORM enforcement |
 | **CCPA/CPRA** | California consumer privacy | DataHawk PI classification (Right to Delete), encryption in transit/at rest, MPA-protected deletion |
+| **UAE PDPL** | UAE federal data privacy (Federal Decree-Law 45/2021) | Helios breach-evidence logging, AES-256/DataLock, DataHawk PII discovery — see note below on DIFC/ADGM |
+| **Saudi PDPL** | Saudi Arabia data privacy | DataHawk PII discovery, in-Kingdom/customer-controlled residency, customer-managed KMS |
+| **Saudi ECC-2:2024** | Saudi Arabia essential cybersecurity controls | FortKnox air-gapped vaulting, SiteContinuity DR testing, MPA |
 
 > **FedRAMP note:** Cohesity Cloud Services for Government holds **FedRAMP Moderate** Authorization (since May 2024). FedRAMP **High** has not been publicly announced as of this writing — the tool states this explicitly in the compliance mapping rather than implying a higher authorization level than Cohesity currently holds. Always verify current status on the [FedRAMP Marketplace](https://marketplace.fedramp.gov/) before a high-impact federal engagement.
+
+> **UAE PDPL note:** Scoped to mainland UAE. The DIFC and ADGM financial free zones run their own separate data protection regimes — confirm which one governs the customer's entity before quoting.
+
+> **Saudi PDPL / ECC-2 note:** a formal cross-border transfer adequacy list has not yet been published, and sources disagree on whether ECC-2 still mandates in-Kingdom backup storage. Verify current guidance with the relevant national authority before committing to a data-residency architecture.
 
 The full clause-level text, requirement lists, and reference URLs for every framework live in `data.js`'s `complianceFrameworks` object.
 
@@ -505,7 +531,7 @@ Cohesity/
 | File | Size | Role |
 |---|---|---|
 | `app.js` | ~142 KB / ~2,900 lines | The `CohesityArchitectWizard` class: constructor state, DOM caching, event binding, `calculateSizing()` (with `sizeNodesForCapacity()`'s RF2/EC + headroom + throughput model), `calculateBandwidth()`, `calculateComplianceScore()`, `calculateTCO()`, the SVG topology renderer, BOM/proposal generators (live HTML, clipboard text, and print HTML — three separate render paths kept in sync), save/load scenario, the As-Built document generator, and the pricing adjuster |
-| `data.js` | ~35 KB / ~600 lines | `COHESITY_DATA`: six product profiles, three physical + one virtual + two cloud node hardware types, the RF2/EC resiliency model, cluster-internal network requirements, five workload presets (dedupe ratio, growth, retention), eight compliance frameworks with clause-level detail, five integration snippet templates, competitive positioning notes |
+| `data.js` | ~35 KB / ~600 lines | `COHESITY_DATA`: six product profiles, three physical + one virtual + two cloud node hardware types, the RF2/EC resiliency model, cluster-internal network requirements, five workload presets (dedupe ratio, growth, retention), eleven compliance frameworks with clause-level detail, five integration snippet templates, competitive positioning notes |
 | `index.html` | ~59 KB / ~970 lines | Static DOM for all six wizard steps (only the active one is visible via a CSS class), the persistent sidebar (now including the edition badge and growth-plan line), and the topology/integration panel that sits below the wizard on every step |
 | `style.css` | ~24 KB / ~1,230 lines | Dark glassmorphism theme, responsive dashboard grid, slider/toggle/radio custom styling |
 | `pricing.json` | ~1 KB | Seven default rate fields, merged into `state.pricing` on load; falls back to `app.js`'s hardcoded defaults if the fetch fails |
@@ -542,6 +568,7 @@ Cohesity/
 | `calculateBandwidth()` | Daily change (raw/dedupe), ingest/replication/vault Mbps + MB/s | Sidebar, Step 3, topology diagram badges, Proposal exec summary, `calculateSizing()`'s throughput check |
 | `calculateComplianceScore()` | 0–100 score + a deduction reason list | Sidebar resilience ring, print export's Resiliency Gap Analysis |
 | `calculateTCO()` | Space saved (TB), avoided cost ($), blended reduction ratio | Proposal TCO card, clipboard text, print export |
+| `calculateRecoveryTime()` | An array of recovery scenarios (RTO text, what-you-get-back, end state) + the overall RPO/data-loss text | Resilience step card, Proposal section, clipboard text, print export, As-Built document |
 | `getNetworkPorts()` | Array of port rules with an `active` flag per current config | Firewall integration tab, print export, As-Built document |
 | `exportScenario()` / `importScenario(json)` | Downloads/restores the full wizard state as JSON | Header Save/Load Scenario buttons |
 | `generateAsBuiltDocument()` | Full technical configuration record as plain text | "Download As-Built Doc" button |

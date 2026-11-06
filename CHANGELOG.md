@@ -4,6 +4,24 @@ All notable changes to the Cohesity Architect Toolkit are documented here.
 
 ---
 
+## [3.1.0] - 2026-11-06
+
+**Recovery expectations and Middle East compliance pass.** Added the one scenario the sizing engine didn't answer yet — "how long will it take to get my data back, what do I get back, and what does it look like afterward" — plus three Gulf-region compliance frameworks that were missing entirely.
+
+### Added (Recovery Expectations)
+- **New `calculateRecoveryTime()` engine** computing four recovery scenarios from the existing sizing/bandwidth model (no new inputs required): single-workload Instant Mass Restore (SnapFS mount, minutes regardless of size), a full local bulk restore bound by aggregate N+1 cluster throughput, DR failover to a live secondary (orchestration-bound if SiteContinuity is on, manual-runbook-bound if not), and FortKnox vault recovery bound by the vault's cloud egress link — the realistic ransomware worst case.
+- Each scenario answers all three questions customers actually ask: **how long** (RTO estimate), **what do I get back** (point-in-time/RPO, and whether the recovered snapshot was malware-scanned), and **what's the end state** (restored in place vs. running on DR/cloud infra pending failback vs. recovered into an isolated cleanroom pending validated move to production).
+- Surfaced in three places: a live "Recovery Expectations" card on the Resilience step, a matching section in the Proposal step/PDF export, and a new section in the As-Built document and clipboard proposal text.
+
+### Fixed
+- **The bandwidth widgets didn't actually live-update.** `updateBandwidthUI()` was only ever called once, at initial page load — changing a workload's backup window, toggling FortKnox, or switching the replication target after that point left the sidebar and Step 3 bandwidth figures stale until a full page reload. It's now called from `updateSidebarStats()`, which already runs on every state change, alongside the new `updateRecoveryUI()`.
+
+### Added (Middle East Compliance)
+- **UAE PDPL (Federal Decree-Law No. 45/2021)** — breach notification, DPO obligations, and data-subject rights mapped to Helios audit logging, AES-256/DataLock, and Threat Defense PII discovery. Notes the separate DIFC/ADGM regimes outside mainland UAE.
+- **Saudi PDPL** — breach-notification, data-residency, and security-safeguard obligations mapped to Helios audit evidence, in-Kingdom/customer-controlled deployment, and customer-managed KMS.
+- **Saudi Essential Cybersecurity Controls (ECC-2:2024)** — backup/recovery management and DR testing controls mapped to FortKnox vaulting and SiteContinuity.
+- Checking either PDPL directive now auto-enables Threat Defense & Data Classification (PII discovery); checking Saudi PDPL also forces customer-managed KMS; checking ECC-2 forces FortKnox + SiteContinuity + MPA — following the same auto-apply pattern as the existing eight frameworks.
+
 ## [3.0.0] - 2026-09-25
 
 **Architecture & deliverables pass.** A follow-up gap analysis against Cohesity's actual products and published best practices turned up a real pricing accuracy problem and several sizing/deliverable gaps. This release closes them.
